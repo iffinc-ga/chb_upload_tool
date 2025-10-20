@@ -61,6 +61,36 @@
 
         // Customer configurations
         const CUSTOMERS = {
+            grass: {
+                name: 'Grass',
+                color: 'green',
+                dbFileName: 'updated_grass_db.xlsx',
+                description: 'Grass customer processing with aluminum/steel duplication',
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
+                tariffFilter: (tariff) => !tariff.startsWith('9'),
+                partNumColumn: 'PRIMARY PART NUM',
+                contentKeyword: 'EXCL'
+            },
+            vieler: {
+                name: 'Vieler',
+                color: 'blue',
+                dbFileName: 'vieler_db.xlsx',
+                description: 'Vieler customer processing',
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
+                tariffFilter: (tariff) => !tariff.startsWith('9'),
+                partNumColumn: 'PRIMARY PART NUM',
+                contentKeyword: 'EXCL'
+            },
+            cb: {
+                name: 'CB Manufacturing',
+                color: 'purple',
+                dbFileName: 'updated_cbman_db.xlsx',
+                description: 'CB Manufacturing customer processing',
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4', 'TARIFF NUM_5'],
+                tariffFilter: (tariff) => !tariff.startsWith('9'),
+                partNumColumn: 'PRIMARY PART NUM',
+                contentKeyword: 'EXCL'
+            },
             manki: {
                 name: 'Manki',
                 color: 'orange',
@@ -70,6 +100,16 @@
                 tariffFilter: (tariff) => tariff.startsWith('3'),
                 partNumColumn: 'PRIMARY PART NUM',
                 contentKeyword: null
+            },
+            eisenmann: {
+                name: 'Eisenmann',
+                color: 'indigo',
+                dbFileName: 'updated_eisenmann_db.xlsx',
+                description: 'Eisenmann customer processing',
+                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
+                tariffFilter: (tariff) => !tariff.startsWith('9'),
+                partNumColumn: 'PRIMARY PART NUM',
+                contentKeyword: 'EXCL'
             }
         };
 
@@ -99,7 +139,7 @@
         };
 
         function CombinedTool() {
-            const [selectedCustomer] = useState('manki');
+            const [selectedCustomer, setSelectedCustomer] = useState('grass');
             const [invoiceData, setInvoiceData] = useState([]);
             const [customerDbData, setCustomerDbData] = useState([]);
             const [tariffMappings, setTariffMappings] = useState([]);
@@ -110,6 +150,7 @@
             const [dbLoaded, setDbLoaded] = useState(false);
             const [dbLoading, setDbLoading] = useState(false);
             const [templateLoaded, setTemplateLoaded] = useState(false);
+            const [templateLoading, setTemplateLoading] = useState(false);
             const [quantity, setQuantity] = useState('');
             const [unitPrice, setUnitPrice] = useState('');
             const [itemTotal, setItemTotal] = useState('');
@@ -120,8 +161,13 @@
 
             const currentCustomer = CUSTOMERS[selectedCustomer];
 
+            // Load database when customer changes
             useEffect(() => {
                 loadCustomerDb();
+            }, [selectedCustomer]);
+
+            // Load template on initial mount
+            useEffect(() => {
                 loadTemplate();
             }, []);
 
@@ -137,6 +183,7 @@
             }, [quantity, itemTotal]);
 
             const loadTemplate = async () => {
+                setTemplateLoading(true);
                 try {
                     const response = await fetch('ies_upload_template.xlsx');
                     if (!response.ok) {
@@ -161,12 +208,28 @@
                     setTemplateLoaded(true);
                 } catch (error) {
                     console.error('Error loading template:', error);
+                    setMessage({ 
+                        type: 'error', 
+                        text: 'Template file not found. Make sure ies_upload_template.xlsx is in the same directory.' 
+                    });
+                } finally {
+                    setTemplateLoading(false);
                 }
             };
 
             const loadCustomerDb = async () => {
                 setDbLoading(true);
                 setDbLoaded(false);
+                setInvoiceData([]);
+                setSelectedRow(null);
+                setQuantity('');
+                setUnitPrice('');
+                setItemTotal('');
+                setDuplicateCount(0);
+                setLastSelectedRow(null);
+                setFileName('');
+                setCustomerDbData([]);
+                setTariffMappings([]);
                 
                 try {
                     const response = await fetch(currentCustomer.dbFileName);
@@ -190,12 +253,12 @@
                     setDbLoaded(true);
                     setMessage({ 
                         type: 'success', 
-                        text: `Database loaded successfully (${mainData.length} records)` 
+                        text: `${currentCustomer.name} database loaded successfully (${mainData.length} records)` 
                     });
                 } catch (error) {
                     setMessage({ 
                         type: 'error', 
-                        text: `Error loading database: ${error.message}` 
+                        text: `Error loading ${currentCustomer.name} database: ${error.message}` 
                     });
                 } finally {
                     setDbLoading(false);
@@ -494,8 +557,9 @@
                 invoiceData.forEach(oneviewRow => {
                     const partNumber = String(oneviewRow.BuyerPartNumber || '').trim();
                     
-                    const mankiRow = customerDbData.find(row => 
-                        String(row['PRIMARY PART NUM'] || '').trim() === partNumber
+                    // Find matching row in current customer's database
+                    const dbRow = customerDbData.find(row => 
+                        String(row[currentCustomer.partNumColumn] || '').trim() === partNumber
                     );
 
                     const outputRow = {};
@@ -508,14 +572,13 @@
                         }
                     });
 
-                    if (mankiRow) {
+                    if (dbRow) {
                         matchedCount++;
                         
-                        const tariffColumns = ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4', 'TARIFF NUM_5'];
                         const allTariffs = [];
                         
-                        tariffColumns.forEach(col => {
-                            const tariff = mankiRow[col];
+                        currentCustomer.tariffColumns.forEach(col => {
+                            const tariff = dbRow[col];
                             if (tariff && String(tariff).trim() !== '') {
                                 allTariffs.push({
                                     value: tariff,
@@ -564,11 +627,11 @@
                 XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
                 
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-                XLSX.writeFile(wb, `IES_Template_${timestamp}.xlsx`);
+                XLSX.writeFile(wb, `IES_Template_${currentCustomer.name}_${timestamp}.xlsx`);
                 
                 setMessage({ 
                     type: 'success', 
-                    text: `Template exported! ${matchedCount} matched, ${unmatchedCount} unmatched` 
+                    text: `Template exported for ${currentCustomer.name}! ${matchedCount} matched, ${unmatchedCount} unmatched` 
                 });
             };
 
@@ -624,7 +687,7 @@
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
                 
-                const newFileName = fileName.replace('.xlsx', '_processed.xlsx');
+                const newFileName = fileName.replace('.xlsx', `_${selectedCustomer}_processed.xlsx`);
                 XLSX.writeFile(workbook, newFileName);
                 
                 setMessage({ type: 'success', text: `File downloaded as ${newFileName}` });
@@ -705,12 +768,74 @@
                 }
             };
 
+            const getColorClasses = (type) => {
+                const colors = {
+                    green: {
+                        bg: 'bg-green-600',
+                        hover: 'hover:bg-green-700',
+                        light: 'bg-green-50',
+                        text: 'text-green-600',
+                        border: 'border-green-200'
+                    },
+                    blue: {
+                        bg: 'bg-blue-600',
+                        hover: 'hover:bg-blue-700',
+                        light: 'bg-blue-50',
+                        text: 'text-blue-600',
+                        border: 'border-blue-200'
+                    },
+                    purple: {
+                        bg: 'bg-purple-600',
+                        hover: 'hover:bg-purple-700',
+                        light: 'bg-purple-50',
+                        text: 'text-purple-600',
+                        border: 'border-purple-200'
+                    },
+                    orange: {
+                        bg: 'bg-orange-600',
+                        hover: 'hover:bg-orange-700',
+                        light: 'bg-orange-50',
+                        text: 'text-orange-600',
+                        border: 'border-orange-200'
+                    },
+                    indigo: {
+                        bg: 'bg-indigo-600',
+                        hover: 'hover:bg-indigo-700',
+                        light: 'bg-indigo-50',
+                        text: 'text-indigo-600',
+                        border: 'border-indigo-200'
+                    }
+                };
+                return colors[currentCustomer.color][type];
+            };
+
             return (
                 <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
                     <div className="max-w-7xl mx-auto">
                         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
-                            <h1 className="text-xl font-bold text-gray-800">Combined Invoice & Template Tool</h1>
-                            <p className="text-sm text-gray-600">Process OneView files with aluminum/steel rows, then export to IES template</p>
+                            <div className="flex items-center justify-between mb-3">
+                                <div>
+                                    <h1 className="text-xl font-bold text-gray-800">Combined Invoice & Template Tool</h1>
+                                    <p className="text-sm text-gray-600">Process OneView files with aluminum/steel rows, then export to IES template</p>
+                                </div>
+                                {/* Customer Tabs */}
+                                <div className="flex gap-2">
+                                    {Object.entries(CUSTOMERS).map(([key, customer]) => (
+                                        <button
+                                            key={key}
+                                            onClick={() => setSelectedCustomer(key)}
+                                            disabled={dbLoading}
+                                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                                                selectedCustomer === key
+                                                    ? `bg-${customer.color}-600 text-white shadow-md`
+                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                        >
+                                            {customer.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
 
                         <div className="bg-white rounded-xl shadow-lg p-4 mb-4 sticky top-0 z-50">
@@ -786,7 +911,7 @@
                                 <button
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={!dbLoaded || dbLoading}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    className={`flex items-center gap-2 px-4 py-2 text-sm ${getColorClasses('bg')} text-white rounded-lg ${getColorClasses('hover')} transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
                                 >
                                     <Upload className="w-4 h-4" />
                                     Upload OneView
@@ -848,9 +973,9 @@
                             </div>
 
                             <div className="grid grid-cols-4 gap-2">
-                                <div className="bg-orange-50 rounded-lg p-2">
-                                    <p className="text-xs text-gray-600">DB Status</p>
-                                    <p className="text-lg font-bold text-orange-600">{dbLoaded ? 'Loaded' : 'Loading...'}</p>
+                                <div className={`${getColorClasses('light')} rounded-lg p-2`}>
+                                    <p className="text-xs text-gray-600">Customer</p>
+                                    <p className={`text-lg font-bold ${getColorClasses('text')}`}>{currentCustomer.name}</p>
                                 </div>
                                 <div className="bg-emerald-50 rounded-lg p-2">
                                     <p className="text-xs text-gray-600">Total Rows</p>
@@ -896,7 +1021,7 @@
                                                     }}
                                                     className={`transition-colors cursor-pointer ${
                                                         selectedRow === index
-                                                            ? 'bg-orange-50'
+                                                            ? getColorClasses('light')
                                                             : row._isDuplicate 
                                                             ? 'bg-emerald-50 hover:bg-emerald-100'
                                                             : 'hover:bg-gray-50'
@@ -905,7 +1030,7 @@
                                                     <td className="px-3 py-2 text-sm font-medium text-gray-900">
                                                         {index + 1}
                                                         {row._isDuplicate && (
-                                                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-600 text-white">
+                                                            <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getColorClasses('bg')} text-white`}>
                                                                 DUP
                                                             </span>
                                                         )}
