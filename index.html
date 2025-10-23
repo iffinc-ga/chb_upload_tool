@@ -331,7 +331,11 @@
                 });
                 
                 if (!part) {
-                    const genericValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
+                    // For MANKI, use "STEEL GENERIC" instead of "STEEL EXCL GENERIC"
+                    const isManki = selectedCustomer === 'manki';
+                    const genericValue = materialType === 'aluminum' 
+                        ? (isManki ? 'ALUM GENERIC' : 'ALUM EXCL GENERIC')
+                        : (isManki ? 'STEEL GENERIC' : 'STEEL EXCL GENERIC');
                     return { 
                         found: true, 
                         value: genericValue, 
@@ -351,7 +355,11 @@
                 }
 
                 if (!tariffNumber) {
-                    const genericValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
+                    // For MANKI, use "STEEL GENERIC" instead of "STEEL EXCL GENERIC"
+                    const isManki = selectedCustomer === 'manki';
+                    const genericValue = materialType === 'aluminum' 
+                        ? (isManki ? 'ALUM GENERIC' : 'ALUM EXCL GENERIC')
+                        : (isManki ? 'STEEL GENERIC' : 'STEEL EXCL GENERIC');
                     return { 
                         found: true, 
                         value: genericValue, 
@@ -382,7 +390,11 @@
                     return { found: true, value: mapping[columnIndex], tariff: tariffNumber, materialType };
                 }
 
-                const defaultValue = materialType === 'aluminum' ? 'ALUM EXCL GENERIC' : 'STEEL EXCL GENERIC';
+                // For MANKI, use "STEEL GENERIC" instead of "STEEL EXCL GENERIC"
+                const isManki = selectedCustomer === 'manki';
+                const defaultValue = materialType === 'aluminum' 
+                    ? (isManki ? 'ALUM GENERIC' : 'ALUM EXCL GENERIC')
+                    : (isManki ? 'STEEL GENERIC' : 'STEEL EXCL GENERIC');
                 return { found: true, value: defaultValue, tariff: tariffNumber, usingDefault: true, materialType };
             };
 
@@ -504,6 +516,10 @@
                 if (quantity !== '') {
                     newRowQuantity = parseFloat(quantity);
                     newRow.Quantity = newRowQuantity;
+                    // Store the duplication quantity for MANKI export
+                    if (selectedCustomer === 'manki') {
+                        newRow._duplicateQuantity = Math.round(newRowQuantity);
+                    }
                 }
                 if (unitPrice !== '') {
                     newRowUnitPrice = parseFloat(unitPrice);
@@ -695,6 +711,12 @@
                         unmatchedCount++;
                     }
 
+                    // For MANKI: If this is a duplicated row with a custom quantity, add it to Secondary Quantity1
+                    if (selectedCustomer === 'manki' && oneviewRow._duplicateQuantity !== undefined) {
+                        outputRow['Secondary Quantity1'] = oneviewRow._duplicateQuantity;
+                        outputRow['Secondaryunitofmeasure1'] = 'KG';
+                    }
+
                     outputData.push(outputRow);
                 });
 
@@ -723,6 +745,7 @@
                     delete newRow._duplicateGroupId;
                     delete newRow._isDuplicate;
                     delete newRow._subtractedItemTotal;
+                    delete newRow._duplicateQuantity;
                     
                     const dateColumns = ['InvoiceDate', 'PO_Date', 'DateOfExport'];
                     dateColumns.forEach(col => {
