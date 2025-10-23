@@ -143,6 +143,7 @@
             const [invoiceData, setInvoiceData] = useState([]);
             const [customerDbData, setCustomerDbData] = useState([]);
             const [tariffMappings, setTariffMappings] = useState([]);
+            const [htsUomData, setHtsUomData] = useState([]);
             const [templateHeaders, setTemplateHeaders] = useState([]);
             const [selectedRow, setSelectedRow] = useState(null);
             const [message, setMessage] = useState(null);
@@ -217,6 +218,21 @@
                 }
             };
 
+            const getUomForHtsCode = (htsCode) => {
+                const htsCodeStr = String(htsCode || '').trim();
+                const uomEntry = htsUomData.find(row => String(row[0] || '').trim() === htsCodeStr);
+                
+                if (uomEntry) {
+                    return {
+                        uom1: uomEntry[1] || 'L',
+                        uom2: uomEntry[2] || null
+                    };
+                }
+                
+                // Default to 'L' if not found
+                return { uom1: 'L', uom2: null };
+            };
+
             const loadCustomerDb = async () => {
                 setDbLoading(true);
                 setDbLoaded(false);
@@ -230,6 +246,7 @@
                 setFileName('');
                 setCustomerDbData([]);
                 setTariffMappings([]);
+                setHtsUomData([]);
                 
                 try {
                     const response = await fetch(currentCustomer.dbFileName);
@@ -248,6 +265,13 @@
                         const sheet1 = workbook.Sheets['Sheet1'];
                         const mappings = XLSX.utils.sheet_to_json(sheet1, { header: 1, defval: "" });
                         setTariffMappings(mappings.slice(1));
+                    }
+                    
+                    // Load HTS UOM data from third tab if it exists (only for Grass customer)
+                    if (selectedCustomer === 'grass' && workbook.SheetNames.includes('hts_codes_with_uom')) {
+                        const htsUomSheet = workbook.Sheets['hts_codes_with_uom'];
+                        const htsUomRawData = XLSX.utils.sheet_to_json(htsUomSheet, { header: 1, defval: "" });
+                        setHtsUomData(htsUomRawData.slice(1)); // Skip header row
                     }
                     
                     setDbLoaded(true);
@@ -612,7 +636,14 @@
                             
                             if (tariff.isBase) {
                                 outputRow[mapping.quantity] = roundedWeight;
-                                outputRow[mapping.unit] = 'L';
+                                
+                                // Get UOM from hts_codes_with_uom tab for Grass customer
+                                if (selectedCustomer === 'grass' && htsUomData.length > 0) {
+                                    const uomInfo = getUomForHtsCode(tariff.value);
+                                    outputRow[mapping.unit] = uomInfo.uom1;
+                                } else {
+                                    outputRow[mapping.unit] = 'L';
+                                }
                             }
                         }
                     } else {
