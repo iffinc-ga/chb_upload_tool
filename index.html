@@ -683,7 +683,13 @@
                             
                             outputRow[mapping.number] = tariff.value;
                             
-                            if (tariff.isBase) {
+                            // For MANKI duplicated rows: skip quantity/UOM for third tariff (i=2)
+                            const isManki = selectedCustomer === 'manki';
+                            const isDuplicatedRow = oneviewRow._isDuplicate === true;
+                            const isThirdTariff = i === 2;
+                            const skipThirdTariffValues = isManki && isDuplicatedRow && isThirdTariff;
+                            
+                            if (tariff.isBase && !skipThirdTariffValues) {
                                 outputRow[mapping.quantity] = roundedWeight;
                                 
                                 // Get UOM from hts_codes_with_uom tab if available for this customer
