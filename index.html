@@ -595,7 +595,35 @@
                     
                     templateHeaders.forEach(header => {
                         if (oneviewRow.hasOwnProperty(header)) {
-                            outputRow[header] = oneviewRow[header];
+                            // Handle date formatting for InvoiceDate
+                            if (header === 'InvoiceDate' && oneviewRow[header]) {
+                                let dateValue = oneviewRow[header];
+                                
+                                // If it's an Excel serial number, convert it
+                                if (typeof dateValue === 'number') {
+                                    const date = XLSX.SSF.parse_date_code(dateValue);
+                                    dateValue = new Date(date.y, date.m - 1, date.d);
+                                } else if (typeof dateValue === 'string') {
+                                    dateValue = new Date(dateValue);
+                                }
+                                
+                                // Format as mm/dd/yyyy
+                                if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
+                                    const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+                                    const day = String(dateValue.getDate()).padStart(2, '0');
+                                    const year = dateValue.getFullYear();
+                                    outputRow[header] = `${month}/${day}/${year}`;
+                                } else {
+                                    outputRow[header] = oneviewRow[header];
+                                }
+                            }
+                            // Blank out Description for Manki
+                            else if (header === 'Description' && selectedCustomer === 'manki') {
+                                outputRow[header] = '';
+                            }
+                            else {
+                                outputRow[header] = oneviewRow[header];
+                            }
                         } else {
                             outputRow[header] = '';
                         }
@@ -624,13 +652,13 @@
                         const roundedWeight = Math.round(netWeight);
                         
                         const tariffMapping = [
-                            { number: 'SecondaryTariffNumber', quantity: 'Secondary Quantity1', unit: 'Secondaryunitofmeasure1' },
-                            { number: 'ThirdTariffNumber', quantity: 'ThirdTariffQuantity1', unit: 'ThirdTariffUnitofMeasure1' },
-                            { number: '4TariffNumber', quantity: '4TariffQuantity1', unit: '4TariffUnitofMeasure1' },
-                            { number: '5TariffNumber', quantity: '5TariffQuantity1', unit: '5TariffUnitofMeasure1' },
-                            { number: '6TariffNumber', quantity: '6TariffQuantity1', unit: '6TariffUnitofMeasure1' },
-                            { number: '7TariffNumber', quantity: '7TariffQuantity1', unit: '7TariffUnitofMeasure1' },
-                            { number: '8TariffNumber', quantity: '8TariffQuantity1', unit: '8TariffUnitofMeasure1' }
+                            { number: 'SecondaryTariffNumber', quantity: 'Secondary Quantity1', unit: 'Secondaryunitofmeasure1', quantity2: 'Secondary Quantity2', unit2: 'Secondaryunitofmeasure2' },
+                            { number: 'ThirdTariffNumber', quantity: 'ThirdTariffQuantity1', unit: 'ThirdTariffUnitofMeasure1', quantity2: 'ThirdTariffQuantity2', unit2: 'ThirdTariffUnitofMeasure2' },
+                            { number: '4TariffNumber', quantity: '4TariffQuantity1', unit: '4TariffUnitofMeasure1', quantity2: '4TariffQuantity2', unit2: '4TariffUnitofMeasure2' },
+                            { number: '5TariffNumber', quantity: '5TariffQuantity1', unit: '5TariffUnitofMeasure1', quantity2: '5TariffQuantity2', unit2: '5TariffUnitofMeasure2' },
+                            { number: '6TariffNumber', quantity: '6TariffQuantity1', unit: '6TariffUnitofMeasure1', quantity2: '6TariffQuantity2', unit2: '6TariffUnitofMeasure2' },
+                            { number: '7TariffNumber', quantity: '7TariffQuantity1', unit: '7TariffUnitofMeasure1', quantity2: '7TariffQuantity2', unit2: '7TariffUnitofMeasure2' },
+                            { number: '8TariffNumber', quantity: '8TariffQuantity1', unit: '8TariffUnitofMeasure1', quantity2: '8TariffQuantity2', unit2: '8TariffUnitofMeasure2' }
                         ];
                         
                         for (let i = 1; i < allTariffs.length && i <= 7; i++) {
@@ -646,6 +674,12 @@
                                 if (currentCustomer.uomTabName && htsUomData.length > 0) {
                                     const uomInfo = getUomForHtsCode(tariff.value);
                                     outputRow[mapping.unit] = uomInfo.uom1;
+                                    
+                                    // If there's a UOM2, also populate quantity2 and unit2
+                                    if (uomInfo.uom2) {
+                                        outputRow[mapping.quantity2] = roundedWeight;
+                                        outputRow[mapping.unit2] = uomInfo.uom2;
+                                    }
                                 } else {
                                     outputRow[mapping.unit] = 'L';
                                 }
