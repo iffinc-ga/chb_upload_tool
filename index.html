@@ -69,7 +69,8 @@
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'),
                 partNumColumn: 'PRIMARY PART NUM',
-                contentKeyword: 'EXCL'
+                contentKeyword: 'EXCL',
+                uomTabName: 'hts_codes_with_uom'
             },
             vieler: {
                 name: 'Vieler',
@@ -79,7 +80,8 @@
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'),
                 partNumColumn: 'PRIMARY PART NUM',
-                contentKeyword: 'EXCL'
+                contentKeyword: 'EXCL',
+                uomTabName: null
             },
             cb: {
                 name: 'CB Manufacturing',
@@ -89,17 +91,19 @@
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4', 'TARIFF NUM_5'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'),
                 partNumColumn: 'PRIMARY PART NUM',
-                contentKeyword: 'EXCL'
+                contentKeyword: 'EXCL',
+                uomTabName: null
             },
             manki: {
                 name: 'Manki',
                 color: 'orange',
-                dbFileName: 'UPDATED_MANKI_DB.xlsx',
+                dbFileName: 'updated_manki_db.xlsx',
                 description: 'Manki customer processing',
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2','TARIFF NUM_3','TARIFF NUM_4', 'TARIFF NUM_5'],
                 tariffFilter: (tariff) => tariff.startsWith('3'),
                 partNumColumn: 'PRIMARY PART NUM',
-                contentKeyword: null
+                contentKeyword: null,
+                uomTabName: 'manki_hts_codes_with_uom'
             },
             eisenmann: {
                 name: 'Eisenmann',
@@ -109,7 +113,8 @@
                 tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
                 tariffFilter: (tariff) => !tariff.startsWith('9'),
                 partNumColumn: 'PRIMARY PART NUM',
-                contentKeyword: 'EXCL'
+                contentKeyword: 'EXCL',
+                uomTabName: null
             }
         };
 
@@ -267,9 +272,9 @@
                         setTariffMappings(mappings.slice(1));
                     }
                     
-                    // Load HTS UOM data from third tab if it exists (only for Grass customer)
-                    if (selectedCustomer === 'grass' && workbook.SheetNames.includes('hts_codes_with_uom')) {
-                        const htsUomSheet = workbook.Sheets['hts_codes_with_uom'];
+                    // Load HTS UOM data from the appropriate tab if it exists
+                    if (currentCustomer.uomTabName && workbook.SheetNames.includes(currentCustomer.uomTabName)) {
+                        const htsUomSheet = workbook.Sheets[currentCustomer.uomTabName];
                         const htsUomRawData = XLSX.utils.sheet_to_json(htsUomSheet, { header: 1, defval: "" });
                         setHtsUomData(htsUomRawData.slice(1)); // Skip header row
                     }
@@ -637,8 +642,8 @@
                             if (tariff.isBase) {
                                 outputRow[mapping.quantity] = roundedWeight;
                                 
-                                // Get UOM from hts_codes_with_uom tab for Grass customer
-                                if (selectedCustomer === 'grass' && htsUomData.length > 0) {
+                                // Get UOM from hts_codes_with_uom tab if available for this customer
+                                if (currentCustomer.uomTabName && htsUomData.length > 0) {
                                     const uomInfo = getUomForHtsCode(tariff.value);
                                     outputRow[mapping.unit] = uomInfo.uom1;
                                 } else {
