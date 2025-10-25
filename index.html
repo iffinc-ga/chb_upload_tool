@@ -311,7 +311,7 @@
         }
         
         function parseInvoiceText(text) {
-            const lines = text.split('\n');
+            const lines = text.split('\n').map(l => l.trim());
             const invoiceData = {};
             allData = [];
             
@@ -329,10 +329,13 @@
                         invoiceData[currentInvoiceNum] = { date: '', supplier: '', total: '' };
                     }
                     
-                    // Look for date
-                    const dateMatch = lines[i + 1]?.match(/from\s+(\d{2}\/\d{2}\/\d{4})/);
-                    if (dateMatch) {
-                        invoiceData[currentInvoiceNum].date = dateMatch[1];
+                    // Look for date in next few lines
+                    for (let j = i + 1; j <= i + 3; j++) {
+                        const dateMatch = lines[j]?.match(/from\s+(\d{2}\/\d{2}\/\d{4})/);
+                        if (dateMatch) {
+                            invoiceData[currentInvoiceNum].date = dateMatch[1];
+                            break;
+                        }
                     }
                 }
                 
@@ -350,7 +353,7 @@
                 }
             }
             
-            // Second pass: extract line items
+            // Second pass: extract line items (multi-line format)
             currentInvoiceNum = null;
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
@@ -361,44 +364,87 @@
                     currentInvoiceNum = invMatch[1];
                 }
                 
-                // Parse line items - flexible regex for container units
-                const lineMatch = line.match(/^(\d+)\s+([\w]+\.[\w.]+)\s+([\d.]+)\s+(\w+)\s*(?:\([^\)]+\))?\s+x\s+([\d.]+)\s+(\w+)\s+([\d,]+\.?\d*)\s+\w+\s+([\d.]+)\s+USD\/(\w+)\s+([\d,]+\.?\d*)$/);
-                
-                if (lineMatch && currentInvoiceNum) {
-                    const pos = lineMatch[1];
-                    const productCode = lineMatch[2];
+                // Look for position number (1-2 digits, alone on a line or with Pos.)
+                if (/^(\d{1,2})$/.test(line) || line.match(/^Pos\.\s*(\d{1,2})$/)) {
+                    const pos = line.replace('Pos.', '').trim();
+                    
+                    // Skip if not a valid line item position
+                    if (parseInt(pos) > 99) continue;
+                    
+                    // Next line should have product code
+                    const productCode = lines[i + 1];
+                    if (!productCode || !productCode.match(/^[\w]+\.[\w.]+$/)) continue;
+                    
                     const partNumber = productCode.split('.')[0];
-                    const containerQty = lineMatch[3];
-                    const containerUnit = lineMatch[4];
-                    const perQty = lineMatch[5];
-                    const volumeUnit = lineMatch[6];
-                    const totalQty = lineMatch[7].replace(/,/g, '');
-                    const unitPrice = lineMatch[8];
-                    const priceUnit = lineMatch[9];
-                    const lineTotal = lineMatch[10].replace(/,/g, '');
+                    
+                    // Look for quantity line (e.g., "20.0 carton(s) x 81.180 FOZ" or "335.0 bucket (s) x 12.000 KG")
+                    let containerQty = '';
+                    let containerUnit = '';
+                    let totalQty = '';
+                    let totalUnit = '';
+                    let unitPrice = '';
+                    let priceUnit = '';
+                    let lineTotal = '';
+                    
+                    // Search next 15 lines for data
+                    for (let j = i + 2; j < i + 20 && j < lines.length; j++) {
+                        const l = lines[j];
+                        
+                        // Quantity line: "20.0 carton(s) x 81.180 FOZ" or "335.0 bucket (s) x 12.000 KG"
+                        const qtyMatch = l.match(/([\d.]+)\s+(\w+)\s*\(?\s*s?\)?\s+x\s+([\d.]+)\s+(\w+)/i);
+                        if (qtyMatch && !containerQty) {
+                            containerQty = qtyMatch[1];
+                            containerUnit = qtyMatch[2];
+                        }
+                        
+                        // Total quantity line: "1,623.600 FOZ" or "4,020.000 KG"
+                        const totalMatch = l.match(/^([\d,]+\.?\d*)\s+(\w+)$/);
+                        if (totalMatch && !totalQty && parseFloat(totalMatch[1].replace(/,/g, '')) > 1) {
+                            totalQty = totalMatch[1].replace(/,/g, '');
+                            totalUnit = totalMatch[2];
+                        }
+                        
+                        // Unit price line: "0.62405 USD/FOZ" or "12.72679 USD/KG"
+                        const priceMatch = l.match(/([\d.]+)\s+USD\/([\w]+)/);
+                        if (priceMatch && !unitPrice) {
+                            unitPrice = priceMatch[1];
+                            priceUnit = priceMatch[2];
+                        }
+                        
+                        // Line total: just a number with comma
+                        const totalLineMatch = l.match(/^([\d,]+\.\d{2})$/);
+                        if (totalLineMatch && !lineTotal && parseFloat(totalLineMatch[1].replace(/,/g, '')) > 10) {
+                            lineTotal = totalLineMatch[1].replace(/,/g, '');
+                        }
+                        
+                        // Stop if we've found everything
+                        if (containerQty && totalQty && unitPrice && lineTotal) break;
+                        
+                        // Stop if we hit next position
+                        if (/^\d{1,2}$/.test(l)) break;
+                    }
+                    
+                    // Skip if we don't have minimum required data
+                    if (!containerQty || !unitPrice || !lineTotal) continue;
                     
                     // Determine correct quantity based on price unit
                     const containerUnits = ['CN', 'CAT', 'PC', 'can', 'bucket', 'barrel', 'canister', 'pail', 'tin', 'cartridge', 'carton', 'piece'];
                     let quantity, unit;
                     
-                    if (containerUnits.some(u => priceUnit.toUpperCase() === u.toUpperCase())) {
+                    if (containerUnits.some(u => priceUnit.toUpperCase() === u.toUpperCase() || containerUnit.toUpperCase().includes(u.toUpperCase()))) {
                         quantity = containerQty;
                         unit = priceUnit;
                     } else {
-                        quantity = totalQty;
+                        quantity = totalQty || containerQty;
                         unit = priceUnit;
                     }
                     
                     // Look for net weight and country
-                    let netWeight = '';
+                    let netWeight = totalQty || '';
                     let country = '';
-                    for (let j = i + 1; j < Math.min(i + 30, lines.length); j++) {
-                        const weightMatch = lines[j].match(/([\d.]+)\s+L\s+([\d,]+\.?\d*)\s+L/);
-                        if (weightMatch && !netWeight) {
-                            netWeight = weightMatch[2].replace(/,/g, '');
-                        }
-                        
-                        const countryMatch = lines[j].match(/Country of origin:\s+([^\n]+)/);
+                    
+                    for (let j = i; j < Math.min(i + 50, lines.length); j++) {
+                        const countryMatch = lines[j].match(/Country of origin:\s*(.+)/i);
                         if (countryMatch) {
                             const countryStr = countryMatch[1].toLowerCase();
                             if (countryStr.includes('germany')) country = 'DE';
@@ -409,23 +455,28 @@
                             else if (countryStr.includes('china')) country = 'CN';
                             break;
                         }
+                        
+                        // Stop at next item
+                        if (j > i + 5 && /^\d{1,2}$/.test(lines[j])) break;
                     }
                     
-                    const invData = invoiceData[currentInvoiceNum] || {};
-                    allData.push({
-                        invoice_number: currentInvoiceNum,
-                        invoice_date: invData.date || '',
-                        invoice_total: invData.total || '',
-                        supplier: invData.supplier || '',
-                        position: pos,
-                        part_number: partNumber,
-                        quantity: quantity,
-                        unit: unit,
-                        unit_price: unitPrice,
-                        line_total: lineTotal,
-                        net_weight: netWeight,
-                        country_of_origin: country
-                    });
+                    if (currentInvoiceNum) {
+                        const invData = invoiceData[currentInvoiceNum] || {};
+                        allData.push({
+                            invoice_number: currentInvoiceNum,
+                            invoice_date: invData.date || '',
+                            invoice_total: invData.total || '',
+                            supplier: invData.supplier || '',
+                            position: pos,
+                            part_number: partNumber,
+                            quantity: quantity,
+                            unit: unit,
+                            unit_price: unitPrice,
+                            line_total: lineTotal,
+                            net_weight: netWeight,
+                            country_of_origin: country
+                        });
+                    }
                 }
             }
             
