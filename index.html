@@ -23,6 +23,14 @@
         .upload-subtext { font-size: 14px; color: #9ca3af; }
         input[type="file"] { display: none; }
         
+        /* Progress overlay */
+        .progress-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 9999; }
+        .progress-box { background: white; padding: 40px; border-radius: 12px; text-align: center; min-width: 300px; }
+        .progress-spinner { border: 4px solid #f3f4f6; border-top: 4px solid #667eea; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        .progress-text { font-size: 18px; color: #374151; margin-bottom: 10px; }
+        .progress-detail { font-size: 14px; color: #6b7280; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
         /* Editor Screen */
         .editor-screen { display: none; }
         .container { max-width: 1600px; margin: 0 auto; background: white; box-shadow: 0 2px 20px rgba(0,0,0,0.1); }
@@ -76,10 +84,18 @@
         
         .loading { text-align: center; padding: 40px; color: #6b7280; }
         .loading-spinner { border: 4px solid #f3f4f6; border-top: 4px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
+    <!-- Progress Overlay -->
+    <div class="progress-overlay" id="progressOverlay">
+        <div class="progress-box">
+            <div class="progress-spinner"></div>
+            <div class="progress-text" id="progressText">Processing PDF...</div>
+            <div class="progress-detail" id="progressDetail">Please wait...</div>
+        </div>
+    </div>
+
     <!-- Upload Screen -->
     <div class="upload-screen" id="uploadScreen">
         <div class="upload-container">
@@ -192,6 +208,9 @@
         // Upload handling
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
+        const progressOverlay = document.getElementById('progressOverlay');
+        const progressText = document.getElementById('progressText');
+        const progressDetail = document.getElementById('progressDetail');
         
         uploadArea.addEventListener('click', () => fileInput.click());
         
@@ -222,30 +241,72 @@
             }
         });
         
+        // Helper function to yield to browser
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
         async function processPDF(file) {
             currentFileName = file.name;
-            document.getElementById('uploadScreen').style.display = 'none';
-            document.getElementById('editorScreen').style.display = 'block';
-            document.getElementById('fileName').textContent = `Processing: ${file.name}`;
+            
+            // Show progress overlay
+            progressOverlay.style.display = 'flex';
+            progressText.textContent = 'Loading PDF...';
+            progressDetail.textContent = 'Please wait...';
             
             try {
                 const arrayBuffer = await file.arrayBuffer();
+                progressText.textContent = 'Reading PDF document...';
+                await delay(10); // Yield to UI
+                
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const totalPages = pdf.numPages;
+                
+                progressText.textContent = `Processing ${totalPages} pages...`;
+                progressDetail.textContent = 'Page 0 of ' + totalPages;
                 
                 let fullText = '';
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map(item => item.str).join(' ');
-                    fullText += pageText + '\n';
+                
+                // Process pages in batches with yields
+                const batchSize = 3; // Process 3 pages at a time
+                for (let i = 1; i <= totalPages; i += batchSize) {
+                    const endPage = Math.min(i + batchSize - 1, totalPages);
+                    
+                    // Process batch
+                    for (let pageNum = i; pageNum <= endPage; pageNum++) {
+                        progressDetail.textContent = `Page ${pageNum} of ${totalPages}`;
+                        
+                        const page = await pdf.getPage(pageNum);
+                        const textContent = await page.getTextContent();
+                        const pageText = textContent.items.map(item => item.str).join(' ');
+                        fullText += pageText + '\n';
+                    }
+                    
+                    // Yield to browser after each batch
+                    await delay(10);
                 }
                 
+                progressText.textContent = 'Parsing invoice data...';
+                progressDetail.textContent = 'Extracting line items...';
+                await delay(10); // Yield before parsing
+                
                 parseInvoiceText(fullText);
+                
+                progressText.textContent = 'Loading editor...';
+                progressDetail.textContent = `${allData.length} line items found`;
+                await delay(10); // Yield before UI update
+                
+                // Hide progress and show editor
+                progressOverlay.style.display = 'none';
+                document.getElementById('uploadScreen').style.display = 'none';
+                document.getElementById('editorScreen').style.display = 'block';
                 document.getElementById('fileName').textContent = `${file.name} - ${allData.length} line items parsed`;
                 
             } catch (error) {
                 console.error('Error processing PDF:', error);
-                showAlert('Error processing PDF. Please make sure it\'s a valid Mankiewicz customs invoice.', 'error');
+                progressOverlay.style.display = 'none';
+                alert('Error processing PDF: ' + error.message + '\n\nPlease make sure it\'s a valid Mankiewicz customs invoice PDF.');
+                resetParser();
             }
         }
         
@@ -368,102 +429,85 @@
                 }
             }
             
-            if (allData.length === 0) {
-                showAlert('No line items found. Please make sure this is a Mankiewicz customs invoice PDF.', 'error');
-            } else {
-                initEditor();
-            }
-        }
-        
-        function initEditor() {
-            populateInvoiceDropdown();
-            document.getElementById('invoiceSelect').addEventListener('change', handleInvoiceChange);
-            document.getElementById('invoiceDateInput').addEventListener('change', updateInvoiceMetadata);
-            document.getElementById('supplierInput').addEventListener('change', updateInvoiceMetadata);
-            document.getElementById('invoiceTotalInput').addEventListener('change', updateInvoiceMetadata);
             loadInvoiceData();
         }
         
-        function populateInvoiceDropdown() {
-            const invoices = [...new Set(allData.map(d => d.invoice_number))].sort();
-            const select = document.getElementById('invoiceSelect');
-            select.innerHTML = '<option value="">All Invoices</option>';
+        function loadInvoiceData() {
+            populateInvoiceSelector();
+            const items = currentInvoice ? allData.filter(d => d.invoice_number === currentInvoice) : allData;
             
-            invoices.forEach(inv => {
+            if (items.length === 0) {
+                document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 40px;">No data to display</td></tr>';
+                return;
+            }
+            
+            // Update header stats
+            const firstItem = items[0];
+            document.getElementById('statInvoice').textContent = firstItem.invoice_number || '-';
+            document.getElementById('invoiceDateInput').value = firstItem.invoice_date || '';
+            document.getElementById('supplierInput').value = firstItem.supplier || '';
+            document.getElementById('invoiceTotalInput').value = firstItem.invoice_total || '';
+            
+            // Build table rows
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            items.forEach((item, localIndex) => {
+                const globalIndex = allData.indexOf(item);
+                const tr = createTableRow(item, globalIndex);
+                tbody.appendChild(tr);
+            });
+            
+            updateValidation();
+            attachHeaderInputListeners();
+        }
+        
+        function populateInvoiceSelector() {
+            const select = document.getElementById('invoiceSelect');
+            const uniqueInvoices = [...new Set(allData.map(d => d.invoice_number))];
+            
+            select.innerHTML = '<option value="">All Invoices</option>';
+            uniqueInvoices.forEach(inv => {
                 const option = document.createElement('option');
                 option.value = inv;
                 option.textContent = `Invoice ${inv}`;
                 select.appendChild(option);
             });
+            
+            select.onchange = function() {
+                currentInvoice = this.value;
+                loadInvoiceData();
+            };
         }
         
-        function handleInvoiceChange(e) {
-            currentInvoice = e.target.value;
-            loadInvoiceData();
-        }
-        
-        function updateInvoiceMetadata() {
-            if (!currentInvoice) {
-                showAlert('Please select a specific invoice first', 'error');
-                return;
-            }
-            
-            const newDate = document.getElementById('invoiceDateInput').value;
-            const newSupplier = document.getElementById('supplierInput').value;
-            const newTotal = document.getElementById('invoiceTotalInput').value;
-            
-            allData.forEach(item => {
-                if (item.invoice_number === currentInvoice) {
-                    if (newDate) item.invoice_date = newDate;
-                    if (newSupplier) item.supplier = newSupplier;
-                    if (newTotal) item.invoice_total = newTotal;
-                }
-            });
-            
-            loadInvoiceData();
-            showAlert('Invoice metadata updated', 'success');
-        }
-        
-        function loadInvoiceData() {
+        function attachHeaderInputListeners() {
             const items = currentInvoice ? allData.filter(d => d.invoice_number === currentInvoice) : allData;
             
-            if (items.length === 0) {
-                document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 40px;">No data found</td></tr>';
-                return;
-            }
+            document.getElementById('invoiceDateInput').onchange = function() {
+                items.forEach(item => item.invoice_date = this.value);
+            };
             
-            const invoiceInfo = items[0];
-            document.getElementById('statInvoice').textContent = currentInvoice || 'All';
-            document.getElementById('invoiceDateInput').value = invoiceInfo.invoice_date || '';
-            document.getElementById('supplierInput').value = invoiceInfo.supplier || '';
-            document.getElementById('invoiceTotalInput').value = invoiceInfo.invoice_total || '';
+            document.getElementById('supplierInput').onchange = function() {
+                items.forEach(item => item.supplier = this.value);
+            };
             
-            renderTable(items);
-            updateValidation();
+            document.getElementById('invoiceTotalInput').onchange = function() {
+                items.forEach(item => item.invoice_total = this.value);
+                updateValidation();
+            };
         }
         
-        function renderTable(items) {
-            const tbody = document.getElementById('tableBody');
-            tbody.innerHTML = '';
-            
-            items.forEach((item, index) => {
-                const tr = createTableRow(item, index);
-                tbody.appendChild(tr);
-            });
-        }
-        
-        function createTableRow(item, index) {
+        function createTableRow(item, globalIndex) {
             const tr = document.createElement('tr');
-            const globalIndex = allData.indexOf(item);
             
-            const quantity = parseFloat(item.quantity) || 0;
-            const unitPrice = parseFloat(item.unit_price) || 0;
-            const calcTotal = (quantity * unitPrice).toFixed(2);
-            const lineTotal = parseFloat(item.line_total || 0).toFixed(2);
-            const isError = Math.abs(calcTotal - lineTotal) > 0.02;
+            const qty = parseFloat(item.quantity) || 0;
+            const price = parseFloat(item.unit_price) || 0;
+            const calcTotal = (qty * price).toFixed(2);
+            const lineTotal = parseFloat(item.line_total) || 0;
+            const isError = Math.abs(parseFloat(calcTotal) - lineTotal) >= 0.02;
             
             tr.innerHTML = `
-                <td><input type="text" value="${item.position || ''}" data-index="${globalIndex}" data-field="position"></td>
+                <td class="readonly">${item.position}</td>
                 <td><input type="text" value="${item.part_number || ''}" data-index="${globalIndex}" data-field="part_number"></td>
                 <td><input type="number" step="any" value="${item.quantity || ''}" data-index="${globalIndex}" data-field="quantity"></td>
                 <td><input type="text" value="${item.unit || ''}" data-index="${globalIndex}" data-field="unit"></td>
