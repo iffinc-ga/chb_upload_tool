@@ -3,1208 +3,612 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Combined Invoice & Template Tool</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <title>Manki Invoice Parser</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; }
+        
+        /* Upload Screen */
+        .upload-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .upload-container { max-width: 600px; width: 100%; background: white; border-radius: 12px; box-shadow: 0 2px 20px rgba(0,0,0,0.1); padding: 40px; text-align: center; }
+        .upload-container h1 { color: #667eea; margin-bottom: 10px; font-size: 32px; }
+        .upload-container p { color: #6b7280; margin-bottom: 30px; }
+        .upload-area { border: 3px dashed #d1d5db; border-radius: 8px; padding: 60px 20px; cursor: pointer; transition: all 0.3s; }
+        .upload-area:hover { border-color: #667eea; background: #f9fafb; }
+        .upload-area.dragover { border-color: #667eea; background: #eef2ff; }
+        .upload-icon { font-size: 48px; margin-bottom: 20px; }
+        .upload-text { font-size: 18px; color: #374151; margin-bottom: 10px; }
+        .upload-subtext { font-size: 14px; color: #9ca3af; }
+        input[type="file"] { display: none; }
+        
+        /* Editor Screen */
+        .editor-screen { display: none; }
+        .container { max-width: 1600px; margin: 0 auto; background: white; box-shadow: 0 2px 20px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; }
+        .header h1 { margin-bottom: 10px; font-size: 28px; }
+        .header .actions { margin-top: 15px; display: flex; gap: 10px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: all 0.3s; }
+        .btn-light { background: white; color: #667eea; }
+        .btn-light:hover { background: #f9fafb; }
+        
+        .controls { padding: 20px 30px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; display: flex; gap: 15px; flex-wrap: wrap; align-items: center; position: sticky; top: 0; z-index: 102; }
+        .control-group { display: flex; align-items: center; gap: 10px; }
+        label { font-weight: 600; color: #374151; font-size: 14px; }
+        select, input { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+        select { min-width: 300px; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-warning { background: #f59e0b; color: white; padding: 4px 8px; font-size: 12px; margin: 0 2px; }
+        .btn-warning:hover { background: #d97706; }
+        .btn-danger { background: #ef4444; color: white; padding: 4px 8px; font-size: 12px; }
+        .btn-danger:hover { background: #dc2626; }
+        
+        .stats { padding: 20px 30px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; background: #fef3c7; border-bottom: 1px solid #fbbf24; position: sticky; top: 75px; z-index: 101; }
+        .stat { padding: 15px; background: white; border-radius: 8px; border-left: 4px solid #f59e0b; }
+        .stat-label { font-size: 12px; color: #6b7280; text-transform: uppercase; margin-bottom: 5px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #1f2937; }
+        .stat-value input { width: 100%; padding: 6px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 18px; font-weight: bold; }
+        .stat-value.small { font-size: 16px; }
+        .stat-value.error { color: #ef4444; }
+        .stat-value.success { color: #10b981; }
+        .stat-value.readonly { font-size: 24px; }
+        
+        .table-container { padding: 30px; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 1400px; }
+        th { background: #f3f4f6; padding: 12px 8px; text-align: left; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb; position: sticky; top: 250px; font-size: 13px; z-index: 100; }
+        td { padding: 10px 8px; border-bottom: 1px solid #e5e7eb; }
+        tr:hover { background: #f9fafb; }
+        td input { width: 100%; padding: 6px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; }
+        td input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+        .error-cell { background: #fee2e2; }
+        .error-cell input { border-color: #ef4444; }
+        .readonly { background: #f9fafb; color: #6b7280; }
+        .actions-cell { text-align: center; white-space: nowrap; }
+        
+        .alert { padding: 15px; margin: 20px 30px; border-radius: 8px; display: none; }
+        .alert.success { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+        .alert.error { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+        .alert.info { background: #dbeafe; color: #1e40af; border: 1px solid #3b82f6; }
+        
+        .editable-label { display: inline-block; padding: 2px 6px; background: #dbeafe; border-radius: 4px; font-size: 10px; color: #1e40af; margin-left: 5px; }
+        
+        .loading { text-align: center; padding: 40px; color: #6b7280; }
+        .loading-spinner { border: 4px solid #f3f4f6; border-top: 4px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
 </head>
 <body>
-    <div id="root"></div>
+    <!-- Upload Screen -->
+    <div class="upload-screen" id="uploadScreen">
+        <div class="upload-container">
+            <h1>📋 Manki Invoice Parser</h1>
+            <p>Parse Mankiewicz customs invoice PDFs instantly in your browser</p>
+            
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📄</div>
+                <div class="upload-text">Click to upload or drag & drop</div>
+                <div class="upload-subtext">Mankiewicz customs invoice PDF</div>
+            </div>
+            
+            <input type="file" id="fileInput" accept=".pdf">
+        </div>
+    </div>
 
-    <script type="text/babel">
-        const { useState, useRef, useEffect } = React;
+    <!-- Editor Screen -->
+    <div class="editor-screen" id="editorScreen">
+        <div class="container">
+            <div class="header">
+                <h1>📋 Manki Invoice Parser</h1>
+                <p id="fileName">Processing...</p>
+                <div class="actions">
+                    <button class="btn btn-light" onclick="resetParser()">← Upload New PDF</button>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label for="invoiceSelect">Filter by Invoice:</label>
+                    <select id="invoiceSelect">
+                        <option value="">All Invoices</option>
+                    </select>
+                </div>
+                <button class="btn btn-success" onclick="exportToExcel()">Export to Excel</button>
+            </div>
+            
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-label">Invoice Number</div>
+                    <div class="stat-value readonly" id="statInvoice">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Invoice Date <span class="editable-label">EDITABLE</span></div>
+                    <div class="stat-value">
+                        <input type="text" id="invoiceDateInput" placeholder="MM/DD/YYYY">
+                    </div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Supplier Name <span class="editable-label">EDITABLE</span></div>
+                    <div class="stat-value small">
+                        <input type="text" id="supplierInput" placeholder="Enter supplier name">
+                    </div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Invoice Total <span class="editable-label">EDITABLE</span></div>
+                    <div class="stat-value">
+                        <input type="number" step="0.01" id="invoiceTotalInput" placeholder="0.00">
+                    </div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Line Items Sum</div>
+                    <div class="stat-value" id="statSum">$0.00</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Difference</div>
+                    <div class="stat-value" id="statDiff">$0.00</div>
+                </div>
+            </div>
+            
+            <div class="alert" id="alert"></div>
+            
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">Pos</th>
+                            <th style="width: 100px;">Part Number</th>
+                            <th style="width: 100px;">Quantity</th>
+                            <th style="width: 80px;">Unit</th>
+                            <th style="width: 120px;">Unit Price</th>
+                            <th style="width: 120px;">Line Total</th>
+                            <th style="width: 100px;">Calc Total</th>
+                            <th style="width: 100px;">Net Weight</th>
+                            <th style="width: 80px;">Country</th>
+                            <th style="width: 120px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <tr>
+                            <td colspan="10" class="loading">
+                                <div class="loading-spinner"></div>
+                                <div>Parsing PDF...</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
-        // Lucide Icons
-        const Upload = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-        );
-
-        const Copy = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-        );
-
-        const Download = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-        );
-
-        const Trash = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-        );
-
-        const AlertCircle = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-        );
-
-        const CheckCircle = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-        );
-
-        const FileText = ({ className }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-        );
-
-        // Customer configurations
-        const CUSTOMERS = {
-            grass: {
-                name: 'Grass',
-                color: 'green',
-                dbFileName: 'updated_grass_db.xlsx',
-                description: 'Grass customer processing with aluminum/steel duplication',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
-                tariffFilter: (tariff) => !tariff.startsWith('9'),
-                partNumColumn: 'PRIMARY PART NUM',
-                contentKeyword: 'EXCL',
-                uomTabName: 'hts_codes_with_uom'
-            },
-            vieler: {
-                name: 'Vieler',
-                color: 'blue',
-                dbFileName: 'vieler_db.xlsx',
-                description: 'Vieler customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
-                tariffFilter: (tariff) => !tariff.startsWith('9'),
-                partNumColumn: 'PRIMARY PART NUM',
-                contentKeyword: 'EXCL',
-                uomTabName: null
-            },
-            cb: {
-                name: 'CB Manufacturing',
-                color: 'purple',
-                dbFileName: 'updated_cbman_db.xlsx',
-                description: 'CB Manufacturing customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4', 'TARIFF NUM_5'],
-                tariffFilter: (tariff) => !tariff.startsWith('9'),
-                partNumColumn: 'PRIMARY PART NUM',
-                contentKeyword: 'EXCL',
-                uomTabName: null
-            },
-            manki: {
-                name: 'Manki',
-                color: 'orange',
-                dbFileName: 'updated_manki_db.xlsx',
-                description: 'Manki customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2','TARIFF NUM_3','TARIFF NUM_4', 'TARIFF NUM_5'],
-                tariffFilter: (tariff) => tariff.startsWith('3'),
-                partNumColumn: 'PRIMARY PART NUM',
-                contentKeyword: null,
-                uomTabName: 'manki_hts_codes_with_uom'
-            },
-            eisenmann: {
-                name: 'Eisenmann',
-                color: 'indigo',
-                dbFileName: 'updated_eisenmann_db.xlsx',
-                description: 'Eisenmann customer processing',
-                tariffColumns: ['TARIFF NUM', 'TARIFF NUM_1', 'TARIFF NUM_2', 'TARIFF NUM_3', 'TARIFF NUM_4'],
-                tariffFilter: (tariff) => !tariff.startsWith('9'),
-                partNumColumn: 'PRIMARY PART NUM',
-                contentKeyword: 'EXCL',
-                uomTabName: null
+    <script>
+        // Configure PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        let allData = [];
+        let currentInvoice = '';
+        let currentFileName = '';
+        
+        // Upload handling
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type === 'application/pdf') {
+                processPDF(file);
+            } else {
+                alert('Please upload a PDF file');
             }
-        };
-
-        const isBaseTariff = (tariff) => {
-            const tariffStr = String(tariff || '').trim();
-            if (!tariffStr) return false;
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                processPDF(file);
+            }
+        });
+        
+        async function processPDF(file) {
+            currentFileName = file.name;
+            document.getElementById('uploadScreen').style.display = 'none';
+            document.getElementById('editorScreen').style.display = 'block';
+            document.getElementById('fileName').textContent = `Processing: ${file.name}`;
             
-            const firstTwo = tariffStr.substring(0, 2);
-            const firstChar = tariffStr.substring(0, 1);
-            
-            const twoDigit = parseInt(firstTwo);
-            if (!isNaN(twoDigit)) {
-                if (twoDigit === 98 || twoDigit === 99) {
-                    return false;
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                
+                let fullText = '';
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    fullText += pageText + '\n';
                 }
-                if (twoDigit >= 10 && twoDigit <= 97) {
-                    return true;
+                
+                parseInvoiceText(fullText);
+                document.getElementById('fileName').textContent = `${file.name} - ${allData.length} line items parsed`;
+                
+            } catch (error) {
+                console.error('Error processing PDF:', error);
+                showAlert('Error processing PDF. Please make sure it\'s a valid Mankiewicz customs invoice.', 'error');
+            }
+        }
+        
+        function parseInvoiceText(text) {
+            const lines = text.split('\n');
+            const invoiceData = {};
+            allData = [];
+            
+            let currentInvoiceNum = null;
+            
+            // First pass: collect invoice metadata
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                // Invoice number
+                const invMatch = line.match(/Customs Invoice\s+(\d+)/);
+                if (invMatch) {
+                    currentInvoiceNum = invMatch[1];
+                    if (!invoiceData[currentInvoiceNum]) {
+                        invoiceData[currentInvoiceNum] = { date: '', supplier: '', total: '' };
+                    }
+                    
+                    // Look for date
+                    const dateMatch = lines[i + 1]?.match(/from\s+(\d{2}\/\d{2}\/\d{4})/);
+                    if (dateMatch) {
+                        invoiceData[currentInvoiceNum].date = dateMatch[1];
+                    }
+                }
+                
+                // Supplier
+                if ((line.includes('GmbH') || line.includes('LLC')) && !line.includes('Mankiew') && currentInvoiceNum) {
+                    if (!invoiceData[currentInvoiceNum].supplier) {
+                        invoiceData[currentInvoiceNum].supplier = line.split(',')[0].trim();
+                    }
+                }
+                
+                // Invoice total
+                const totalMatch = line.match(/Overall amount in USD\s+([\d,]+\.?\d*)/);
+                if (totalMatch && currentInvoiceNum) {
+                    invoiceData[currentInvoiceNum].total = totalMatch[1].replace(/,/g, '');
                 }
             }
             
-            const oneDigit = parseInt(firstChar);
-            if (!isNaN(oneDigit) && oneDigit >= 1 && oneDigit <= 9) {
-                return true;
-            }
-            
-            return false;
-        };
-
-        function CombinedTool() {
-            const [selectedCustomer, setSelectedCustomer] = useState('grass');
-            const [invoiceData, setInvoiceData] = useState([]);
-            const [customerDbData, setCustomerDbData] = useState([]);
-            const [tariffMappings, setTariffMappings] = useState([]);
-            const [htsUomData, setHtsUomData] = useState([]);
-            const [templateHeaders, setTemplateHeaders] = useState([]);
-            const [selectedRow, setSelectedRow] = useState(null);
-            const [message, setMessage] = useState(null);
-            const [fileName, setFileName] = useState('');
-            const [dbLoaded, setDbLoaded] = useState(false);
-            const [dbLoading, setDbLoading] = useState(false);
-            const [templateLoaded, setTemplateLoaded] = useState(false);
-            const [templateLoading, setTemplateLoading] = useState(false);
-            const [quantity, setQuantity] = useState('');
-            const [unitPrice, setUnitPrice] = useState('');
-            const [itemTotal, setItemTotal] = useState('');
-            const [duplicateCount, setDuplicateCount] = useState(0);
-            const [lastSelectedRow, setLastSelectedRow] = useState(null);
-            
-            const fileInputRef = useRef(null);
-
-            const currentCustomer = CUSTOMERS[selectedCustomer];
-
-            // Load database when customer changes
-            useEffect(() => {
-                loadCustomerDb();
-            }, [selectedCustomer]);
-
-            // Load template on initial mount
-            useEffect(() => {
-                loadTemplate();
-            }, []);
-
-            useEffect(() => {
-                if (quantity !== '' && itemTotal !== '') {
-                    const qty = parseFloat(quantity);
-                    const total = parseFloat(itemTotal);
-                    if (qty > 0 && !isNaN(qty) && !isNaN(total)) {
-                        const calculatedUnitPrice = total / qty;
-                        setUnitPrice(calculatedUnitPrice.toFixed(2));
-                    }
+            // Second pass: extract line items
+            currentInvoiceNum = null;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                // Track current invoice
+                const invMatch = line.match(/Customs Invoice\s+(\d+)/);
+                if (invMatch) {
+                    currentInvoiceNum = invMatch[1];
                 }
-            }, [quantity, itemTotal]);
-
-            const loadTemplate = async () => {
-                setTemplateLoading(true);
-                try {
-                    const response = await fetch('ies_upload_template.xlsx');
-                    if (!response.ok) {
-                        throw new Error('Template file not found');
-                    }
+                
+                // Parse line items - flexible regex for container units
+                const lineMatch = line.match(/^(\d+)\s+([\w]+\.[\w.]+)\s+([\d.]+)\s+(\w+)\s*(?:\([^\)]+\))?\s+x\s+([\d.]+)\s+(\w+)\s+([\d,]+\.?\d*)\s+\w+\s+([\d.]+)\s+USD\/(\w+)\s+([\d,]+\.?\d*)$/);
+                
+                if (lineMatch && currentInvoiceNum) {
+                    const pos = lineMatch[1];
+                    const productCode = lineMatch[2];
+                    const partNumber = productCode.split('.')[0];
+                    const containerQty = lineMatch[3];
+                    const containerUnit = lineMatch[4];
+                    const perQty = lineMatch[5];
+                    const volumeUnit = lineMatch[6];
+                    const totalQty = lineMatch[7].replace(/,/g, '');
+                    const unitPrice = lineMatch[8];
+                    const priceUnit = lineMatch[9];
+                    const lineTotal = lineMatch[10].replace(/,/g, '');
                     
-                    const arrayBuffer = await response.arrayBuffer();
-                    const workbook = XLSX.read(arrayBuffer);
-                    const templateSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const range = XLSX.utils.decode_range(templateSheet['!ref']);
+                    // Determine correct quantity based on price unit
+                    const containerUnits = ['CN', 'CAT', 'PC', 'can', 'bucket', 'barrel', 'canister', 'pail', 'tin', 'cartridge', 'carton', 'piece'];
+                    let quantity, unit;
                     
-                    const headers = [];
-                    for (let col = range.s.c; col <= range.e.c; col++) {
-                        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-                        const cell = templateSheet[cellAddress];
-                        if (cell && cell.v) {
-                            headers.push(cell.v);
-                        }
-                    }
-                    
-                    setTemplateHeaders(headers);
-                    setTemplateLoaded(true);
-                } catch (error) {
-                    console.error('Error loading template:', error);
-                    setMessage({ 
-                        type: 'error', 
-                        text: 'Template file not found. Make sure ies_upload_template.xlsx is in the same directory.' 
-                    });
-                } finally {
-                    setTemplateLoading(false);
-                }
-            };
-
-            const getUomForHtsCode = (htsCode) => {
-                const htsCodeStr = String(htsCode || '').trim();
-                const uomEntry = htsUomData.find(row => String(row[0] || '').trim() === htsCodeStr);
-                
-                if (uomEntry) {
-                    return {
-                        uom1: uomEntry[1] || 'L',
-                        uom2: uomEntry[2] || null
-                    };
-                }
-                
-                // Default to 'L' if not found
-                return { uom1: 'L', uom2: null };
-            };
-
-            const loadCustomerDb = async () => {
-                setDbLoading(true);
-                setDbLoaded(false);
-                setInvoiceData([]);
-                setSelectedRow(null);
-                setQuantity('');
-                setUnitPrice('');
-                setItemTotal('');
-                setDuplicateCount(0);
-                setLastSelectedRow(null);
-                setFileName('');
-                setCustomerDbData([]);
-                setTariffMappings([]);
-                setHtsUomData([]);
-                
-                try {
-                    const response = await fetch(currentCustomer.dbFileName);
-                    if (!response.ok) {
-                        throw new Error(`Database file not found: ${currentCustomer.dbFileName}`);
-                    }
-                    
-                    const arrayBuffer = await response.arrayBuffer();
-                    const workbook = XLSX.read(arrayBuffer);
-                    
-                    const mainSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const mainData = XLSX.utils.sheet_to_json(mainSheet, { defval: "" });
-                    setCustomerDbData(mainData);
-                    
-                    if (workbook.SheetNames.includes('Sheet1')) {
-                        const sheet1 = workbook.Sheets['Sheet1'];
-                        const mappings = XLSX.utils.sheet_to_json(sheet1, { header: 1, defval: "" });
-                        setTariffMappings(mappings.slice(1));
-                    }
-                    
-                    // Load HTS UOM data from the appropriate tab if it exists
-                    if (currentCustomer.uomTabName && workbook.SheetNames.includes(currentCustomer.uomTabName)) {
-                        const htsUomSheet = workbook.Sheets[currentCustomer.uomTabName];
-                        const htsUomRawData = XLSX.utils.sheet_to_json(htsUomSheet, { header: 1, defval: "" });
-                        setHtsUomData(htsUomRawData.slice(1)); // Skip header row
-                    }
-                    
-                    setDbLoaded(true);
-                    setMessage({ 
-                        type: 'success', 
-                        text: `${currentCustomer.name} database loaded successfully (${mainData.length} records)` 
-                    });
-                } catch (error) {
-                    setMessage({ 
-                        type: 'error', 
-                        text: `Error loading ${currentCustomer.name} database: ${error.message}` 
-                    });
-                } finally {
-                    setDbLoading(false);
-                }
-            };
-
-            const handleFileUpload = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                setFileName(file.name);
-                const reader = new FileReader();
-                
-                reader.onload = (e) => {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-                        
-                        setInvoiceData(jsonData);
-                        setSelectedRow(null);
-                        setDuplicateCount(0);
-                        setLastSelectedRow(null);
-                        setMessage({ type: 'success', text: `Loaded ${jsonData.length} rows from ${file.name}` });
-                    } catch (error) {
-                        setMessage({ type: 'error', text: 'Error reading file: ' + error.message });
-                    }
-                };
-                
-                reader.readAsArrayBuffer(file);
-            };
-
-            const findTariffValueContent = (partNumber, materialType) => {
-                const normalizedPartNumber = String(partNumber || '').trim();
-                const config = currentCustomer;
-                
-                const part = customerDbData.find(row => {
-                    const dbPartNum = String(row[config.partNumColumn] || '').trim();
-                    return dbPartNum === normalizedPartNumber;
-                });
-                
-                if (!part) {
-                    // For MANKI, use "STEEL GENERIC" instead of "STEEL EXCL GENERIC"
-                    const isManki = selectedCustomer === 'manki';
-                    const genericValue = materialType === 'aluminum' 
-                        ? (isManki ? 'ALUM GENERIC' : 'ALUM EXCL GENERIC')
-                        : (isManki ? 'STEEL GENERIC' : 'STEEL EXCL GENERIC');
-                    return { 
-                        found: true, 
-                        value: genericValue, 
-                        materialType,
-                        partNotFound: true 
-                    };
-                }
-
-                let tariffNumber = null;
-                
-                for (const col of config.tariffColumns) {
-                    const tariff = String(part[col] || '').trim();
-                    if (tariff && config.tariffFilter(tariff)) {
-                        tariffNumber = tariff;
-                        break;
-                    }
-                }
-
-                if (!tariffNumber) {
-                    // For MANKI, use "STEEL GENERIC" instead of "STEEL EXCL GENERIC"
-                    const isManki = selectedCustomer === 'manki';
-                    const genericValue = materialType === 'aluminum' 
-                        ? (isManki ? 'ALUM GENERIC' : 'ALUM EXCL GENERIC')
-                        : (isManki ? 'STEEL GENERIC' : 'STEEL EXCL GENERIC');
-                    return { 
-                        found: true, 
-                        value: genericValue, 
-                        materialType,
-                        noValidTariff: true 
-                    };
-                }
-
-                const mapping = tariffMappings.find(row => {
-                    const tariffCol = String(row[0] || '').trim();
-                    
-                    if (!tariffCol || tariffCol !== tariffNumber) {
-                        return false;
-                    }
-                    
-                    if (config.contentKeyword === null) {
-                        return true;
-                    }
-                    
-                    const aluminumCol = String(row[1] || '').trim();
-                    const steelCol = String(row[2] || '').trim();
-                    return aluminumCol.includes(config.contentKeyword) || steelCol.includes(config.contentKeyword);
-                });
-
-                const columnIndex = materialType === 'aluminum' ? 1 : 2;
-                
-                if (mapping && mapping[columnIndex]) {
-                    return { found: true, value: mapping[columnIndex], tariff: tariffNumber, materialType };
-                }
-
-                // For MANKI, use "STEEL GENERIC" instead of "STEEL EXCL GENERIC"
-                const isManki = selectedCustomer === 'manki';
-                const defaultValue = materialType === 'aluminum' 
-                    ? (isManki ? 'ALUM GENERIC' : 'ALUM EXCL GENERIC')
-                    : (isManki ? 'STEEL GENERIC' : 'STEEL EXCL GENERIC');
-                return { found: true, value: defaultValue, tariff: tariffNumber, usingDefault: true, materialType };
-            };
-
-            const findTariffValueAll = (partNumber, materialType) => {
-                const normalizedPartNumber = String(partNumber || '').trim();
-                const config = currentCustomer;
-                
-                const part = customerDbData.find(row => {
-                    const dbPartNum = String(row[config.partNumColumn] || '').trim();
-                    return dbPartNum === normalizedPartNumber;
-                });
-                
-                if (!part) {
-                    const genericValue = materialType === 'aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC';
-                    return { 
-                        found: true, 
-                        value: genericValue, 
-                        materialType,
-                        partNotFound: true 
-                    };
-                }
-
-                let baseTariff = null;
-                
-                for (const col of config.tariffColumns) {
-                    const tariff = String(part[col] || '').trim();
-                    if (tariff && isBaseTariff(tariff)) {
-                        baseTariff = tariff;
-                        break;
-                    }
-                }
-
-                if (!baseTariff) {
-                    const genericValue = materialType === 'aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC';
-                    return { 
-                        found: true, 
-                        value: genericValue, 
-                        materialType,
-                        noBaseTariff: true 
-                    };
-                }
-
-                const mapping = tariffMappings.find(row => {
-                    const tariffCol = String(row[0] || '').trim();
-                    const aluminumCol = String(row[1] || '').trim();
-                    const steelCol = String(row[2] || '').trim();
-                    
-                    return tariffCol === baseTariff && 
-                           (aluminumCol.includes('ALL') || steelCol.includes('ALL'));
-                });
-
-                const columnIndex = materialType === 'aluminum' ? 1 : 2;
-                
-                if (mapping && mapping[columnIndex]) {
-                    return { found: true, value: mapping[columnIndex], tariff: baseTariff, materialType };
-                }
-
-                const defaultValue = materialType === 'aluminum' ? 'ALL ALUM GENERIC' : 'ALL STEEL GENERIC';
-                return { found: true, value: defaultValue, tariff: baseTariff, usingDefault: true, materialType };
-            };
-
-            const duplicateRow = (materialType, mode = 'content') => {
-                if (selectedRow === null) {
-                    setMessage({ type: 'error', text: 'Please select a row to duplicate' });
-                    return;
-                }
-
-                if (lastSelectedRow !== selectedRow) {
-                    setDuplicateCount(0);
-                    setLastSelectedRow(selectedRow);
-                }
-
-                const rowToModify = invoiceData[selectedRow];
-                const partNumber = rowToModify.BuyerPartNumber;
-                
-                const tariffResult = mode === 'all' 
-                    ? findTariffValueAll(partNumber, materialType)
-                    : findTariffValueContent(partNumber, materialType);
-
-                const materialLabel = materialType === 'aluminum' ? 'Aluminum' : 'Steel';
-                const modeLabel = mode === 'all' ? 'ALL' : 'Content';
-                let messageText = '';
-                
-                if (tariffResult.partNotFound) {
-                    messageText = `Part number not found in database - using generic ${modeLabel} ${materialLabel} value`;
-                } else if (mode === 'all' && tariffResult.noBaseTariff) {
-                    messageText = `No base tariff (1-97) found for part - using generic ALL ${materialLabel} value`;
-                } else if (mode === 'content' && tariffResult.noValidTariff) {
-                    messageText = `No valid tariff found for part - using generic ${materialLabel} Content value`;
-                } else if (tariffResult.usingDefault) {
-                    messageText = `Using default ${modeLabel} ${materialLabel} value. Tariff ${tariffResult.tariff} not found in mappings.`;
-                } else {
-                    messageText = `Applied ${modeLabel} ${materialLabel}: ${tariffResult.value} (Tariff: ${tariffResult.tariff})`;
-                }
-
-                if (mode === 'all') {
-                    const newData = [...invoiceData];
-                    newData[selectedRow] = {
-                        ...rowToModify,
-                        BuyerPartNumber: tariffResult.value,
-                        SupplierPartNumber: tariffResult.value
-                    };
-                    setInvoiceData(newData);
-                    setMessage({ type: 'success', text: `Line replaced with ${messageText}` });
-                    return;
-                }
-
-                const newRow = { ...rowToModify };
-                newRow.BuyerPartNumber = tariffResult.value;
-                newRow.SupplierPartNumber = tariffResult.value;
-                newRow._isDuplicate = true;
-
-                const hasCustomValues = quantity !== '' || unitPrice !== '' || itemTotal !== '';
-                
-                let newRowQuantity = rowToModify.Quantity;
-                let newRowUnitPrice = rowToModify.UnitPrice;
-                let newRowItemTotal = rowToModify.ItemTotal;
-
-                if (quantity !== '') {
-                    newRowQuantity = parseFloat(quantity);
-                    newRow.Quantity = newRowQuantity;
-                    // Store the duplication quantity for MANKI export
-                    if (selectedCustomer === 'manki') {
-                        newRow._duplicateQuantity = Math.round(newRowQuantity);
-                    }
-                }
-                if (unitPrice !== '') {
-                    newRowUnitPrice = parseFloat(unitPrice);
-                    newRow.UnitPrice = newRowUnitPrice;
-                }
-                if (itemTotal !== '') {
-                    newRowItemTotal = parseFloat(itemTotal);
-                    newRow.ItemTotal = newRowItemTotal;
-                }
-                
-                if (quantity !== '' && itemTotal !== '' && unitPrice === '') {
-                    newRowUnitPrice = newRowItemTotal / newRowQuantity;
-                    newRow.UnitPrice = newRowUnitPrice;
-                } else if (quantity !== '' || unitPrice !== '') {
-                    newRowItemTotal = newRowQuantity * newRowUnitPrice;
-                    newRow.ItemTotal = newRowItemTotal;
-                }
-
-                let updatedOriginalRow = rowToModify;
-                if (hasCustomValues) {
-                    updatedOriginalRow = { ...rowToModify };
-                    
-                    const remainingItemTotal = (rowToModify.ItemTotal || 0) - newRowItemTotal;
-                    
-                    updatedOriginalRow.Quantity = rowToModify.Quantity;
-                    updatedOriginalRow.ItemTotal = remainingItemTotal;
-                    
-                    if (updatedOriginalRow.Quantity > 0) {
-                        updatedOriginalRow.UnitPrice = remainingItemTotal / updatedOriginalRow.Quantity;
+                    if (containerUnits.some(u => priceUnit.toUpperCase() === u.toUpperCase())) {
+                        quantity = containerQty;
+                        unit = priceUnit;
                     } else {
-                        updatedOriginalRow.UnitPrice = 0;
+                        quantity = totalQty;
+                        unit = priceUnit;
                     }
                     
-                    newRow._subtractedItemTotal = newRowItemTotal;
-                }
-
-                const insertPosition = selectedRow + duplicateCount + 1;
-                
-                const newData = hasCustomValues ? [
-                    ...invoiceData.slice(0, selectedRow),
-                    updatedOriginalRow,
-                    ...invoiceData.slice(selectedRow + 1, insertPosition),
-                    newRow,
-                    ...invoiceData.slice(insertPosition)
-                ] : [
-                    ...invoiceData.slice(0, insertPosition),
-                    newRow,
-                    ...invoiceData.slice(insertPosition)
-                ];
-
-                setInvoiceData(newData);
-                setDuplicateCount(duplicateCount + 1);
-                
-                if (hasCustomValues) {
-                    messageText += ` | Original row updated: Total=${updatedOriginalRow.ItemTotal.toFixed(2)}, Price=${updatedOriginalRow.UnitPrice.toFixed(2)} (Qty unchanged: ${updatedOriginalRow.Quantity})`;
-                }
-                
-                setMessage({ type: 'success', text: `Row duplicated for ${messageText}` });
-                
-                setQuantity('');
-                setUnitPrice('');
-                setItemTotal('');
-            };
-
-            const exportToTemplate = () => {
-                if (invoiceData.length === 0) {
-                    setMessage({ type: 'error', text: 'No data to export' });
-                    return;
-                }
-
-                if (!templateLoaded) {
-                    setMessage({ type: 'error', text: 'Template not loaded' });
-                    return;
-                }
-
-                const outputData = [];
-                let matchedCount = 0;
-                let unmatchedCount = 0;
-
-                invoiceData.forEach(oneviewRow => {
-                    const partNumber = String(oneviewRow.BuyerPartNumber || '').trim();
-                    
-                    // Find matching row in current customer's database
-                    const dbRow = customerDbData.find(row => 
-                        String(row[currentCustomer.partNumColumn] || '').trim() === partNumber
-                    );
-
-                    const outputRow = {};
-                    
-                    templateHeaders.forEach(header => {
-                        if (oneviewRow.hasOwnProperty(header)) {
-                            // Handle date formatting for InvoiceDate
-                            if (header === 'InvoiceDate' && oneviewRow[header]) {
-                                let dateValue = oneviewRow[header];
-                                
-                                // If it's an Excel serial number, convert it
-                                if (typeof dateValue === 'number') {
-                                    const date = XLSX.SSF.parse_date_code(dateValue);
-                                    dateValue = new Date(date.y, date.m - 1, date.d);
-                                } else if (typeof dateValue === 'string') {
-                                    dateValue = new Date(dateValue);
-                                }
-                                
-                                // Format as mm/dd/yyyy
-                                if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
-                                    const month = String(dateValue.getMonth() + 1).padStart(2, '0');
-                                    const day = String(dateValue.getDate()).padStart(2, '0');
-                                    const year = dateValue.getFullYear();
-                                    outputRow[header] = `${month}/${day}/${year}`;
-                                } else {
-                                    outputRow[header] = oneviewRow[header];
-                                }
-                            }
-                            // Blank out Description for Manki
-                            else if (header === 'Description' && selectedCustomer === 'manki') {
-                                outputRow[header] = '';
-                            }
-                            else {
-                                outputRow[header] = oneviewRow[header];
-                            }
-                        } else {
-                            outputRow[header] = '';
-                        }
-                    });
-
-                    if (dbRow) {
-                        matchedCount++;
-                        
-                        const allTariffs = [];
-                        
-                        currentCustomer.tariffColumns.forEach(col => {
-                            const tariff = dbRow[col];
-                            if (tariff && String(tariff).trim() !== '') {
-                                allTariffs.push({
-                                    value: tariff,
-                                    isBase: isBaseTariff(tariff)
-                                });
-                            }
-                        });
-                        
-                        if (allTariffs.length > 0) {
-                            outputRow['TariffNumber'] = allTariffs[0].value;
+                    // Look for net weight and country
+                    let netWeight = '';
+                    let country = '';
+                    for (let j = i + 1; j < Math.min(i + 30, lines.length); j++) {
+                        const weightMatch = lines[j].match(/([\d.]+)\s+L\s+([\d,]+\.?\d*)\s+L/);
+                        if (weightMatch && !netWeight) {
+                            netWeight = weightMatch[2].replace(/,/g, '');
                         }
                         
-                        const netWeight = oneviewRow.NetWeight || 0;
-                        const roundedWeight = Math.round(netWeight);
-                        
-                        const tariffMapping = [
-                            { number: 'SecondaryTariffNumber', quantity: 'Secondary Quantity1', unit: 'Secondaryunitofmeasure1', quantity2: 'secondaryquantity2', unit2: 'secondaryunitofmeasure2' },
-                            { number: 'ThirdTariffNumber', quantity: 'ThirdTariffQuantity1', unit: 'ThirdTariffUnitofMeasure1', quantity2: 'ThirdTariffQuantity2', unit2: 'ThirdTariffUnitofMeasure2' },
-                            { number: '4TariffNumber', quantity: '4TariffQuantity1', unit: '4TariffUnitofMeasure1', quantity2: '4TariffQuantity2', unit2: '4TariffUnitofMeasure2' },
-                            { number: '5TariffNumber', quantity: '5TariffQuantity1', unit: '5TariffUnitofMeasure1', quantity2: '5TariffQuantity2', unit2: '5TariffUnitofMeasure2' },
-                            { number: '6TariffNumber', quantity: '6TariffQuantity1', unit: '6TariffUnitofMeasure1', quantity2: '6TariffQuantity2', unit2: '6TariffUnitofMeasure2' },
-                            { number: '7TariffNumber', quantity: '7TariffQuantity1', unit: '7TariffUnitofMeasure1', quantity2: '7TariffQuantity2', unit2: '7TariffUnitofMeasure2' },
-                            { number: '8TariffNumber', quantity: '8TariffQuantity1', unit: '8TariffUnitofMeasure1', quantity2: '8TariffQuantity2', unit2: '8TariffUnitofMeasure2' }
-                        ];
-                        
-                        for (let i = 1; i < allTariffs.length && i <= 7; i++) {
-                            const tariff = allTariffs[i];
-                            const mapping = tariffMapping[i - 1];
-                            
-                            outputRow[mapping.number] = tariff.value;
-                            
-                            // For MANKI duplicated rows: skip quantity/UOM for third tariff (i=2)
-                            const isManki = selectedCustomer === 'manki';
-                            const isDuplicatedRow = oneviewRow._isDuplicate === true;
-                            const isThirdTariff = i === 2;
-                            const skipThirdTariffValues = isManki && isDuplicatedRow && isThirdTariff;
-                            
-                            if (tariff.isBase && !skipThirdTariffValues) {
-                                outputRow[mapping.quantity] = roundedWeight;
-                                
-                                // Get UOM from hts_codes_with_uom tab if available for this customer
-                                if (currentCustomer.uomTabName && htsUomData.length > 0) {
-                                    const uomInfo = getUomForHtsCode(tariff.value);
-                                    outputRow[mapping.unit] = uomInfo.uom1;
-                                    
-                                    console.log(`Tariff ${tariff.value}: UOM1=${uomInfo.uom1}, UOM2=${uomInfo.uom2}`);
-                                    console.log(`  Setting ${mapping.quantity} = ${roundedWeight}`);
-                                    console.log(`  Setting ${mapping.unit} = ${uomInfo.uom1}`);
-                                    
-                                    // If there's a UOM2, also populate quantity2 and unit2
-                                    if (uomInfo.uom2) {
-                                        outputRow[mapping.quantity2] = roundedWeight;
-                                        outputRow[mapping.unit2] = uomInfo.uom2;
-                                        console.log(`  Setting ${mapping.quantity2} = ${roundedWeight}`);
-                                        console.log(`  Setting ${mapping.unit2} = ${uomInfo.uom2}`);
-                                    }
-                                } else {
-                                    outputRow[mapping.unit] = 'L';
-                                }
-                            }
-                        }
-                    } else {
-                        unmatchedCount++;
-                    }
-
-                    // For MANKI: If this is a duplicated row with a custom quantity, add it to Secondary Quantity1
-                    if (selectedCustomer === 'manki' && oneviewRow._duplicateQuantity !== undefined) {
-                        outputRow['Secondary Quantity1'] = oneviewRow._duplicateQuantity;
-                        outputRow['Secondaryunitofmeasure1'] = 'KG';
-                    }
-
-                    outputData.push(outputRow);
-                });
-
-                const ws = XLSX.utils.json_to_sheet(outputData, { header: templateHeaders });
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-                
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-                XLSX.writeFile(wb, `IES_Template_${currentCustomer.name}_${timestamp}.xlsx`);
-                
-                setMessage({ 
-                    type: 'success', 
-                    text: `Template exported for ${currentCustomer.name}! ${matchedCount} matched, ${unmatchedCount} unmatched` 
-                });
-            };
-
-            const downloadFile = () => {
-                if (invoiceData.length === 0) {
-                    setMessage({ type: 'error', text: 'No data to download' });
-                    return;
-                }
-
-                const processedData = invoiceData.map(row => {
-                    const newRow = { ...row };
-                    
-                    delete newRow._duplicateGroupId;
-                    delete newRow._isDuplicate;
-                    delete newRow._subtractedItemTotal;
-                    delete newRow._duplicateQuantity;
-                    
-                    const dateColumns = ['InvoiceDate', 'PO_Date', 'DateOfExport'];
-                    dateColumns.forEach(col => {
-                        if (newRow[col]) {
-                            if (typeof newRow[col] === 'number') {
-                                const date = XLSX.SSF.parse_date_code(newRow[col]);
-                                newRow[col] = new Date(date.y, date.m - 1, date.d);
-                            } else if (typeof newRow[col] === 'string') {
-                                const date = new Date(newRow[col]);
-                                if (!isNaN(date.getTime())) {
-                                    newRow[col] = date;
-                                }
-                            }
-                        }
-                    });
-                    
-                    return newRow;
-                });
-
-                const worksheet = XLSX.utils.json_to_sheet(processedData);
-                
-                const range = XLSX.utils.decode_range(worksheet['!ref']);
-                const header = XLSX.utils.sheet_to_json(worksheet, { header: 1 })[0];
-                
-                ['InvoiceDate', 'PO_Date', 'DateOfExport'].forEach(dateCol => {
-                    const colIndex = header.indexOf(dateCol);
-                    if (colIndex !== -1) {
-                        const colLetter = XLSX.utils.encode_col(colIndex);
-                        for (let row = 1; row <= range.e.r; row++) {
-                            const cellAddress = `${colLetter}${row + 1}`;
-                            if (worksheet[cellAddress] && worksheet[cellAddress].t !== 's') {
-                                worksheet[cellAddress].z = 'mm/dd/yyyy';
-                            }
-                        }
-                    }
-                });
-                
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
-                
-                const newFileName = fileName.replace('.xlsx', `_${selectedCustomer}_processed.xlsx`);
-                XLSX.writeFile(workbook, newFileName);
-                
-                setMessage({ type: 'success', text: `File downloaded as ${newFileName}` });
-            };
-
-            const deleteRow = (index) => {
-                const rowToDelete = invoiceData[index];
-                
-                if (!rowToDelete._isDuplicate) {
-                    setMessage({ type: 'error', text: 'Cannot delete original data rows. Only duplicated rows can be deleted.' });
-                    return;
-                }
-
-                const newData = [...invoiceData];
-                
-                if (rowToDelete._subtractedItemTotal !== undefined) {
-                    let originalRowIndex = -1;
-                    for (let i = index - 1; i >= 0; i--) {
-                        if (!newData[i]._isDuplicate) {
-                            originalRowIndex = i;
+                        const countryMatch = lines[j].match(/Country of origin:\s+([^\n]+)/);
+                        if (countryMatch) {
+                            const countryStr = countryMatch[1].toLowerCase();
+                            if (countryStr.includes('germany')) country = 'DE';
+                            else if (countryStr.includes('netherlands')) country = 'NL';
+                            else if (countryStr.includes('japan')) country = 'JP';
+                            else if (countryStr.includes('slovenia')) country = 'SI';
+                            else if (countryStr.includes('mozambique')) country = 'MZ';
+                            else if (countryStr.includes('china')) country = 'CN';
                             break;
                         }
                     }
                     
-                    if (originalRowIndex !== -1) {
-                        newData[originalRowIndex] = { ...newData[originalRowIndex] };
-                        
-                        const restoredItemTotal = (newData[originalRowIndex].ItemTotal || 0) + rowToDelete._subtractedItemTotal;
-                        
-                        newData[originalRowIndex].ItemTotal = restoredItemTotal;
-                        
-                        if (newData[originalRowIndex].Quantity > 0) {
-                            newData[originalRowIndex].UnitPrice = restoredItemTotal / newData[originalRowIndex].Quantity;
-                        }
-                    }
+                    const invData = invoiceData[currentInvoiceNum] || {};
+                    allData.push({
+                        invoice_number: currentInvoiceNum,
+                        invoice_date: invData.date || '',
+                        invoice_total: invData.total || '',
+                        supplier: invData.supplier || '',
+                        position: pos,
+                        part_number: partNumber,
+                        quantity: quantity,
+                        unit: unit,
+                        unit_price: unitPrice,
+                        line_total: lineTotal,
+                        net_weight: netWeight,
+                        country_of_origin: country
+                    });
                 }
-                
-                const finalData = newData.filter((_, i) => i !== index);
-                setInvoiceData(finalData);
-                
-                if (selectedRow === index) {
-                    setSelectedRow(null);
-                } else if (selectedRow !== null && index < selectedRow) {
-                    setSelectedRow(selectedRow - 1);
-                }
-                
-                if (selectedRow !== null && index > selectedRow && duplicateCount > 0) {
-                    setDuplicateCount(duplicateCount - 1);
-                }
-                
-                setMessage({ type: 'success', text: 'Duplicated row deleted and original values restored.' });
-            };
-
-            const updateRowValue = (index, field, value) => {
-                const newData = [...invoiceData];
-                const parsedValue = parseFloat(value);
-                
-                if (!isNaN(parsedValue) && parsedValue >= 0) {
-                    newData[index][field] = parsedValue;
-                    
-                    if (field === 'Quantity') {
-                        const qty = parsedValue;
-                        const price = newData[index].UnitPrice || 0;
-                        newData[index].ItemTotal = qty * price;
-                    } else if (field === 'UnitPrice') {
-                        const qty = newData[index].Quantity || 0;
-                        const price = parsedValue;
-                        newData[index].ItemTotal = qty * price;
-                    } else if (field === 'ItemTotal') {
-                        const qty = newData[index].Quantity || 0;
-                        const total = parsedValue;
-                        if (qty > 0) {
-                            newData[index].UnitPrice = total / qty;
-                        }
-                    }
-                    
-                    setInvoiceData(newData);
-                }
-            };
-
-            const getColorClasses = (type) => {
-                const colors = {
-                    green: {
-                        bg: 'bg-green-600',
-                        hover: 'hover:bg-green-700',
-                        light: 'bg-green-50',
-                        text: 'text-green-600',
-                        border: 'border-green-200'
-                    },
-                    blue: {
-                        bg: 'bg-blue-600',
-                        hover: 'hover:bg-blue-700',
-                        light: 'bg-blue-50',
-                        text: 'text-blue-600',
-                        border: 'border-blue-200'
-                    },
-                    purple: {
-                        bg: 'bg-purple-600',
-                        hover: 'hover:bg-purple-700',
-                        light: 'bg-purple-50',
-                        text: 'text-purple-600',
-                        border: 'border-purple-200'
-                    },
-                    orange: {
-                        bg: 'bg-orange-600',
-                        hover: 'hover:bg-orange-700',
-                        light: 'bg-orange-50',
-                        text: 'text-orange-600',
-                        border: 'border-orange-200'
-                    },
-                    indigo: {
-                        bg: 'bg-indigo-600',
-                        hover: 'hover:bg-indigo-700',
-                        light: 'bg-indigo-50',
-                        text: 'text-indigo-600',
-                        border: 'border-indigo-200'
-                    }
-                };
-                return colors[currentCustomer.color][type];
-            };
-
-            return (
-                <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-                    <div className="max-w-7xl mx-auto">
-                        <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
-                            <div className="flex items-center justify-between mb-3">
-                                <div>
-                                    <h1 className="text-xl font-bold text-gray-800">Combined Invoice & Template Tool</h1>
-                                    <p className="text-sm text-gray-600">Process OneView files with aluminum/steel rows, then export to IES template</p>
-                                </div>
-                                {/* Customer Tabs */}
-                                <div className="flex gap-2">
-                                    {Object.entries(CUSTOMERS).map(([key, customer]) => (
-                                        <button
-                                            key={key}
-                                            onClick={() => setSelectedCustomer(key)}
-                                            disabled={dbLoading}
-                                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                                                selectedCustomer === key
-                                                    ? `bg-${customer.color}-600 text-white shadow-md`
-                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
-                                        >
-                                            {customer.name}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl shadow-lg p-4 mb-4 sticky top-0 z-50">
-                            {message && (
-                                <div className={`mb-3 p-3 rounded-lg flex items-start gap-2 ${
-                                    message.type === 'success' ? 'bg-green-50 border border-green-200' : 
-                                    message.type === 'info' ? 'bg-blue-50 border border-blue-200' :
-                                    'bg-red-50 border border-red-200'
-                                }`}>
-                                    {message.type === 'success' ? (
-                                        <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
-                                    ) : (
-                                        <AlertCircle className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
-                                            message.type === 'info' ? 'text-blue-600' : 'text-red-600'
-                                        }`} />
-                                    )}
-                                    <p className={`text-sm ${
-                                        message.type === 'success' ? 'text-green-800' : 
-                                        message.type === 'info' ? 'text-blue-800' :
-                                        'text-red-800'
-                                    }`}>{message.text}</p>
-                                </div>
-                            )}
-
-                            {invoiceData.length > 0 && dbLoaded && (
-                                <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Optional: Override Values for Duplicated Row (Content buttons only)</h3>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
-                                            <input
-                                                type="number"
-                                                value={quantity}
-                                                onChange={(e) => setQuantity(e.target.value)}
-                                                placeholder="Use original"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Unit Price (auto-calc)</label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={unitPrice}
-                                                onChange={(e) => setUnitPrice(e.target.value)}
-                                                placeholder="Auto-calculated"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-600 mb-1">Item Total</label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                value={itemTotal}
-                                                onChange={(e) => setItemTotal(e.target.value)}
-                                                placeholder="Use original"
-                                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="flex gap-2 mb-3 flex-wrap">
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    onChange={handleFileUpload}
-                                    accept=".xlsx,.xls"
-                                    className="hidden"
-                                />
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={!dbLoaded || dbLoading}
-                                    className={`flex items-center gap-2 px-4 py-2 text-sm ${getColorClasses('bg')} text-white rounded-lg ${getColorClasses('hover')} transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed`}
-                                >
-                                    <Upload className="w-4 h-4" />
-                                    Upload OneView
-                                </button>
-                                
-                                <button
-                                    onClick={() => duplicateRow('aluminum', 'all')}
-                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <Copy className="w-4 h-4" />
-                                    All Aluminum
-                                </button>
-
-                                <button
-                                    onClick={() => duplicateRow('steel', 'all')}
-                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <Copy className="w-4 h-4" />
-                                    All Steel
-                                </button>
-
-                                <button
-                                    onClick={() => duplicateRow('aluminum', 'content')}
-                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <Copy className="w-4 h-4" />
-                                    Aluminum Content
-                                </button>
-
-                                <button
-                                    onClick={() => duplicateRow('steel', 'content')}
-                                    disabled={selectedRow === null || invoiceData.length === 0 || !dbLoaded}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <Copy className="w-4 h-4" />
-                                    Steel Content
-                                </button>
-
-                                <button
-                                    onClick={downloadFile}
-                                    disabled={invoiceData.length === 0}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <Download className="w-4 h-4" />
-                                    Download Processed
-                                </button>
-
-                                <button
-                                    onClick={exportToTemplate}
-                                    disabled={invoiceData.length === 0 || !templateLoaded}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-                                >
-                                    <FileText className="w-4 h-4" />
-                                    Export to IES Template
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-4 gap-2">
-                                <div className={`${getColorClasses('light')} rounded-lg p-2`}>
-                                    <p className="text-xs text-gray-600">Customer</p>
-                                    <p className={`text-lg font-bold ${getColorClasses('text')}`}>{currentCustomer.name}</p>
-                                </div>
-                                <div className="bg-emerald-50 rounded-lg p-2">
-                                    <p className="text-xs text-gray-600">Total Rows</p>
-                                    <p className="text-lg font-bold text-emerald-600">{invoiceData.length > 0 ? invoiceData.length : '-'}</p>
-                                </div>
-                                <div className="bg-teal-50 rounded-lg p-2">
-                                    <p className="text-xs text-gray-600">Selected Row</p>
-                                    <p className="text-lg font-bold text-teal-600">{selectedRow !== null ? selectedRow + 1 : '-'}</p>
-                                </div>
-                                <div className="bg-cyan-50 rounded-lg p-2">
-                                    <p className="text-xs text-gray-600">Template</p>
-                                    <p className="text-lg font-bold text-cyan-600">{templateLoaded ? 'Ready' : 'Loading...'}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {invoiceData.length > 0 && (
-                            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                                <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 280px)' }}>
-                                    <table className="w-full">
-                                        <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-                                            <tr>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Line #</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Invoice #</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Supplier Part #</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Description</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Quantity</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Unit Price</th>
-                                                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Item Total</th>
-                                                <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200">
-                                            {invoiceData.map((row, index) => (
-                                                <tr
-                                                    key={index}
-                                                    onClick={() => {
-                                                        setSelectedRow(index);
-                                                        if (lastSelectedRow !== index) {
-                                                            setDuplicateCount(0);
-                                                            setLastSelectedRow(index);
-                                                        }
-                                                    }}
-                                                    className={`transition-colors cursor-pointer ${
-                                                        selectedRow === index
-                                                            ? getColorClasses('light')
-                                                            : row._isDuplicate 
-                                                            ? 'bg-emerald-50 hover:bg-emerald-100'
-                                                            : 'hover:bg-gray-50'
-                                                    }`}
-                                                >
-                                                    <td className="px-3 py-2 text-sm font-medium text-gray-900">
-                                                        {index + 1}
-                                                        {row._isDuplicate && (
-                                                            <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getColorClasses('bg')} text-white`}>
-                                                                DUP
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-3 py-2 text-sm text-gray-700">{row.InvoiceNumber}</td>
-                                                    <td className="px-3 py-2 text-sm text-gray-900 font-medium">{row.SupplierPartNumber}</td>
-                                                    <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate">{row.Description}</td>
-                                                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                                                        <input
-                                                            type="number"
-                                                            value={row.Quantity || ''}
-                                                            onChange={(e) => updateRowValue(index, 'Quantity', e.target.value)}
-                                                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                                        />
-                                                    </td>
-                                                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            value={row.UnitPrice || ''}
-                                                            onChange={(e) => updateRowValue(index, 'UnitPrice', e.target.value)}
-                                                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                                        />
-                                                    </td>
-                                                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                                                        <input
-                                                            type="number"
-                                                            step="0.01"
-                                                            value={row.ItemTotal || ''}
-                                                            onChange={(e) => updateRowValue(index, 'ItemTotal', e.target.value)}
-                                                            className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 font-semibold"
-                                                        />
-                                                    </td>
-                                                    <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                                                        {row._isDuplicate ? (
-                                                            <button
-                                                                onClick={() => deleteRow(index)}
-                                                                className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors"
-                                                                title="Delete this duplicated row"
-                                                            >
-                                                                <Trash className="w-3 h-3 mr-1" />
-                                                                Delete
-                                                            </button>
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400">Original</span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-
-                        {invoiceData.length === 0 && dbLoaded && !dbLoading && (
-                            <div className="bg-white rounded-xl shadow-lg p-8 text-center">
-                                <Upload className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                                <p className="text-gray-600">Upload a OneView file to get started</p>
-                                <p className="text-sm text-gray-500 mt-2">Add aluminum/steel rows, then export to IES template</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
+            }
+            
+            if (allData.length === 0) {
+                showAlert('No line items found. Please make sure this is a Mankiewicz customs invoice PDF.', 'error');
+            } else {
+                initEditor();
+            }
         }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<CombinedTool />);
+        
+        function initEditor() {
+            populateInvoiceDropdown();
+            document.getElementById('invoiceSelect').addEventListener('change', handleInvoiceChange);
+            document.getElementById('invoiceDateInput').addEventListener('change', updateInvoiceMetadata);
+            document.getElementById('supplierInput').addEventListener('change', updateInvoiceMetadata);
+            document.getElementById('invoiceTotalInput').addEventListener('change', updateInvoiceMetadata);
+            loadInvoiceData();
+        }
+        
+        function populateInvoiceDropdown() {
+            const invoices = [...new Set(allData.map(d => d.invoice_number))].sort();
+            const select = document.getElementById('invoiceSelect');
+            select.innerHTML = '<option value="">All Invoices</option>';
+            
+            invoices.forEach(inv => {
+                const option = document.createElement('option');
+                option.value = inv;
+                option.textContent = `Invoice ${inv}`;
+                select.appendChild(option);
+            });
+        }
+        
+        function handleInvoiceChange(e) {
+            currentInvoice = e.target.value;
+            loadInvoiceData();
+        }
+        
+        function updateInvoiceMetadata() {
+            if (!currentInvoice) {
+                showAlert('Please select a specific invoice first', 'error');
+                return;
+            }
+            
+            const newDate = document.getElementById('invoiceDateInput').value;
+            const newSupplier = document.getElementById('supplierInput').value;
+            const newTotal = document.getElementById('invoiceTotalInput').value;
+            
+            allData.forEach(item => {
+                if (item.invoice_number === currentInvoice) {
+                    if (newDate) item.invoice_date = newDate;
+                    if (newSupplier) item.supplier = newSupplier;
+                    if (newTotal) item.invoice_total = newTotal;
+                }
+            });
+            
+            loadInvoiceData();
+            showAlert('Invoice metadata updated', 'success');
+        }
+        
+        function loadInvoiceData() {
+            const items = currentInvoice ? allData.filter(d => d.invoice_number === currentInvoice) : allData;
+            
+            if (items.length === 0) {
+                document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 40px;">No data found</td></tr>';
+                return;
+            }
+            
+            const invoiceInfo = items[0];
+            document.getElementById('statInvoice').textContent = currentInvoice || 'All';
+            document.getElementById('invoiceDateInput').value = invoiceInfo.invoice_date || '';
+            document.getElementById('supplierInput').value = invoiceInfo.supplier || '';
+            document.getElementById('invoiceTotalInput').value = invoiceInfo.invoice_total || '';
+            
+            renderTable(items);
+            updateValidation();
+        }
+        
+        function renderTable(items) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+            
+            items.forEach((item, index) => {
+                const tr = createTableRow(item, index);
+                tbody.appendChild(tr);
+            });
+        }
+        
+        function createTableRow(item, index) {
+            const tr = document.createElement('tr');
+            const globalIndex = allData.indexOf(item);
+            
+            const quantity = parseFloat(item.quantity) || 0;
+            const unitPrice = parseFloat(item.unit_price) || 0;
+            const calcTotal = (quantity * unitPrice).toFixed(2);
+            const lineTotal = parseFloat(item.line_total || 0).toFixed(2);
+            const isError = Math.abs(calcTotal - lineTotal) > 0.02;
+            
+            tr.innerHTML = `
+                <td><input type="text" value="${item.position || ''}" data-index="${globalIndex}" data-field="position"></td>
+                <td><input type="text" value="${item.part_number || ''}" data-index="${globalIndex}" data-field="part_number"></td>
+                <td><input type="number" step="any" value="${item.quantity || ''}" data-index="${globalIndex}" data-field="quantity"></td>
+                <td><input type="text" value="${item.unit || ''}" data-index="${globalIndex}" data-field="unit"></td>
+                <td><input type="number" step="any" value="${item.unit_price || ''}" data-index="${globalIndex}" data-field="unit_price"></td>
+                <td class="${isError ? 'error-cell' : ''}"><input type="number" step="any" value="${item.line_total || ''}" data-index="${globalIndex}" data-field="line_total"></td>
+                <td class="readonly">$${calcTotal}</td>
+                <td><input type="number" step="any" value="${item.net_weight || ''}" data-index="${globalIndex}" data-field="net_weight"></td>
+                <td><input type="text" value="${item.country_of_origin || ''}" data-index="${globalIndex}" data-field="country_of_origin" maxlength="2"></td>
+                <td class="actions-cell">
+                    <button class="btn-warning" onclick="insertRowBelow(${globalIndex})">Insert Below</button>
+                    <button class="btn-danger" onclick="deleteRow(${globalIndex})">Delete</button>
+                </td>
+            `;
+            
+            tr.querySelectorAll('input').forEach(input => {
+                input.addEventListener('change', function() {
+                    const idx = parseInt(this.dataset.index);
+                    const field = this.dataset.field;
+                    if (allData[idx]) {
+                        allData[idx][field] = this.value;
+                        loadInvoiceData();
+                    }
+                });
+            });
+            
+            return tr;
+        }
+        
+        function insertRowBelow(index) {
+            const currentItem = allData[index];
+            const newItem = {
+                invoice_number: currentItem.invoice_number,
+                invoice_date: currentItem.invoice_date || '',
+                invoice_total: currentItem.invoice_total || '',
+                supplier: currentItem.supplier || '',
+                position: '',
+                part_number: '',
+                quantity: '0',
+                unit: '',
+                unit_price: '0',
+                line_total: '0',
+                net_weight: '',
+                country_of_origin: ''
+            };
+            
+            allData.splice(index + 1, 0, newItem);
+            loadInvoiceData();
+            showAlert('Row inserted', 'success');
+        }
+        
+        function deleteRow(index) {
+            if (!confirm('Delete this line item?')) return;
+            allData.splice(index, 1);
+            loadInvoiceData();
+            showAlert('Row deleted', 'success');
+        }
+        
+        function updateValidation() {
+            const items = currentInvoice ? allData.filter(d => d.invoice_number === currentInvoice) : allData;
+            if (items.length === 0) return;
+            
+            const invoiceTotal = parseFloat(items[0].invoice_total) || 0;
+            const lineItemsSum = items.reduce((sum, item) => sum + (parseFloat(item.line_total) || 0), 0);
+            const difference = Math.abs(invoiceTotal - lineItemsSum);
+            
+            document.getElementById('statSum').textContent = '$' + lineItemsSum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('statDiff').textContent = '$' + difference.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            
+            const diffElement = document.getElementById('statDiff');
+            if (difference < 0.02) {
+                diffElement.classList.remove('error');
+                diffElement.classList.add('success');
+            } else {
+                diffElement.classList.remove('success');
+                diffElement.classList.add('error');
+            }
+        }
+        
+        function exportToExcel() {
+            const wb = XLSX.utils.book_new();
+            
+            const headers = [
+                'InvoiceNumber', 'InvoiceDate', 'InvoiceTotal', 'SupplierMID', 'SupplierName',
+                'BuyerPartNumber', 'SupplierPartNumber', 'Quantity', 'UnitOfMeasure', 'Description',
+                'UnitPrice', 'ItemTotal', 'CurrencyCode', 'ExchangeRate', 'CountryOfOrigin',
+                'CountryOfExport', 'DateOfExport', 'PortOfLading', 'RelatedParty', 'PO_Number',
+                'PO_Date', 'GrossWeight', 'GrossWeightUnit', 'NetWeight', 'TariffNumber',
+                'TariffDescription', 'Quantity1', 'UnitOfMeasure1', 'Quantity2', 'UnitOfMeasure2',
+                'Quantity3', 'UnitOfMeasure3', 'PrimarySPI', 'SecondarySPI', 'DeliverTo',
+                'SoldTo', 'SecondaryTariffNumber'
+            ];
+            
+            const rows = [headers];
+            
+            allData.forEach(item => {
+                const row = new Array(37).fill('');
+                row[0] = item.invoice_number;
+                row[1] = item.invoice_date;
+                row[2] = parseFloat(item.invoice_total) || '';
+                row[3] = '';
+                row[4] = item.supplier;
+                row[5] = '';
+                row[6] = item.part_number;
+                row[7] = parseFloat(item.quantity) || '';
+                row[8] = item.unit;
+                row[9] = '';
+                row[10] = parseFloat(item.unit_price) || '';
+                row[11] = parseFloat(item.line_total) || '';
+                row[12] = '';
+                row[13] = '';
+                row[14] = item.country_of_origin;
+                row[23] = parseFloat(item.net_weight) || '';
+                
+                rows.push(row);
+            });
+            
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            XLSX.utils.book_append_sheet(wb, ws, 'Invoice Data');
+            
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            const fileName = currentFileName.replace('.pdf', '') || 'invoice';
+            XLSX.writeFile(wb, `manki_${fileName}_${timestamp}.xlsx`);
+            
+            showAlert('Excel file exported successfully!', 'success');
+        }
+        
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert ${type}`;
+            alert.style.display = 'block';
+            
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+        
+        function resetParser() {
+            allData = [];
+            currentInvoice = '';
+            currentFileName = '';
+            document.getElementById('editorScreen').style.display = 'none';
+            document.getElementById('uploadScreen').style.display = 'flex';
+            document.getElementById('fileInput').value = '';
+        }
     </script>
 </body>
 </html>
