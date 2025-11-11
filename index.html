@@ -530,10 +530,17 @@
                     newRow.ItemTotal = newRowItemTotal;
                 }
                 
-                if (quantity !== '' && itemTotal !== '' && unitPrice === '') {
-                    newRowUnitPrice = newRowItemTotal / newRowQuantity;
-                    newRow.UnitPrice = newRowUnitPrice;
-                } else if (quantity !== '' || unitPrice !== '') {
+                // Calculate missing values based on what the user provided
+                if (itemTotal !== '') {
+                    // User provided itemTotal - use it exactly as entered
+                    if (quantity !== '' && unitPrice === '') {
+                        // Calculate unit price from itemTotal and quantity
+                        newRowUnitPrice = newRowItemTotal / newRowQuantity;
+                        newRow.UnitPrice = newRowUnitPrice;
+                    }
+                    // If user provided all three or just itemTotal, use the itemTotal as-is
+                } else if (quantity !== '' && unitPrice !== '') {
+                    // User didn't provide itemTotal but provided both quantity and price
                     newRowItemTotal = newRowQuantity * newRowUnitPrice;
                     newRow.ItemTotal = newRowItemTotal;
                 }
