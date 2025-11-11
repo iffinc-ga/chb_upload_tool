@@ -536,12 +536,12 @@
                     if (quantity !== '' && unitPrice === '') {
                         // Calculate unit price from itemTotal and quantity
                         newRowUnitPrice = newRowItemTotal / newRowQuantity;
-                        newRow.UnitPrice = newRowUnitPrice;
+                        newRow.UnitPrice = Math.round(newRowUnitPrice * 10000) / 10000;
                     }
                     // If user provided all three or just itemTotal, use the itemTotal as-is
                 } else if (quantity !== '' && unitPrice !== '') {
                     // User didn't provide itemTotal but provided both quantity and price
-                    newRowItemTotal = newRowQuantity * newRowUnitPrice;
+                    newRowItemTotal = Math.round(newRowQuantity * newRowUnitPrice * 100) / 100;
                     newRow.ItemTotal = newRowItemTotal;
                 }
 
@@ -552,10 +552,13 @@
                     const remainingItemTotal = (rowToModify.ItemTotal || 0) - newRowItemTotal;
                     
                     updatedOriginalRow.Quantity = rowToModify.Quantity;
-                    updatedOriginalRow.ItemTotal = remainingItemTotal;
+                    // Round to 2 decimal places to avoid floating-point precision issues
+                    updatedOriginalRow.ItemTotal = Math.round(remainingItemTotal * 100) / 100;
                     
                     if (updatedOriginalRow.Quantity > 0) {
-                        updatedOriginalRow.UnitPrice = remainingItemTotal / updatedOriginalRow.Quantity;
+                        const calculatedPrice = updatedOriginalRow.ItemTotal / updatedOriginalRow.Quantity;
+                        // Round unit price to 4 decimal places
+                        updatedOriginalRow.UnitPrice = Math.round(calculatedPrice * 10000) / 10000;
                     } else {
                         updatedOriginalRow.UnitPrice = 0;
                     }
@@ -863,16 +866,19 @@
                     if (field === 'Quantity') {
                         const qty = parsedValue;
                         const price = newData[index].UnitPrice || 0;
-                        newData[index].ItemTotal = qty * price;
+                        // Round to 2 decimal places to avoid floating-point precision issues
+                        newData[index].ItemTotal = Math.round(qty * price * 100) / 100;
                     } else if (field === 'UnitPrice') {
                         const qty = newData[index].Quantity || 0;
                         const price = parsedValue;
-                        newData[index].ItemTotal = qty * price;
+                        // Round to 2 decimal places to avoid floating-point precision issues
+                        newData[index].ItemTotal = Math.round(qty * price * 100) / 100;
                     } else if (field === 'ItemTotal') {
                         const qty = newData[index].Quantity || 0;
                         const total = parsedValue;
                         if (qty > 0) {
-                            newData[index].UnitPrice = total / qty;
+                            // Round unit price to 4 decimal places
+                            newData[index].UnitPrice = Math.round((total / qty) * 10000) / 10000;
                         }
                     }
                     
