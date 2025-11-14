@@ -643,6 +643,16 @@
                                     outputRow[header] = oneviewRow[header];
                                 }
                             }
+                            // Calculate UnitPrice from ItemTotal / Quantity
+                            else if (header === 'UnitPrice') {
+                                const qty = oneviewRow.Quantity || 0;
+                                const total = oneviewRow.ItemTotal || 0;
+                                if (qty > 0) {
+                                    outputRow[header] = Math.round((total / qty) * 10000) / 10000;
+                                } else {
+                                    outputRow[header] = oneviewRow[header];
+                                }
+                            }
                             // Blank out Description for Manki
                             else if (header === 'Description' && selectedCustomer === 'manki') {
                                 outputRow[header] = '';
